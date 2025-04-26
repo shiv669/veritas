@@ -79,11 +79,11 @@ def main():
         description="Search a FAISS index with SentenceTransformers embeddings."
     )
     parser.add_argument(
-        "--index", type=str, default="veritas_faiss.index",
+        "--index", type=str, default="models/veritas_faiss.index",
         help="Path to the FAISS index file."
     )
     parser.add_argument(
-        "--meta", type=str, default="veritas_metadata.pkl",
+        "--meta", type=str, default="models/veritas_metadata.pkl",
         help="Path to the pickled metadata file."
     )
     parser.add_argument(

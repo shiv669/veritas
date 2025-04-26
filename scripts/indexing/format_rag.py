@@ -27,8 +27,8 @@ def preprocess_entry(entry, chunk_size=512):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input",  default="1.json", help="Path to input NDJSON file")
-    parser.add_argument("--output", default="rag_chunks.json", help="Output JSON file path")
+    parser.add_argument("--input",  default="data/1.json", help="Path to input NDJSON file")
+    parser.add_argument("--output", default="data/rag_chunks.json", help="Output JSON file path")
     parser.add_argument("--chunk_size", type=int, default=512, help="Max characters per chunk")
     args = parser.parse_args()
 

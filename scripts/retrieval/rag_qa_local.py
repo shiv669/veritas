@@ -18,8 +18,8 @@ from sentence_transformers import SentenceTransformer
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
-DEFAULT_INDEX   = "veritas_faiss.index"
-DEFAULT_META    = "veritas_metadata.pkl"
+DEFAULT_INDEX   = "models/veritas_faiss.index"
+DEFAULT_META    = "models/veritas_metadata.pkl"
 DEFAULT_EMBED   = "all-MiniLM-L6-v2"
 DEFAULT_GEN     = "meta-llama/Llama-2-7b-chat-hf"  # your local model
 DEFAULT_TOP_K   = 5

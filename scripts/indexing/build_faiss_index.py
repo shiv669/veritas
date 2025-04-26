@@ -29,7 +29,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler("build_faiss_index.log"),
+        logging.FileHandler("logs/build_faiss_index.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -83,9 +83,9 @@ def build_faiss_index(dim: int, index_type: str, nlist: int):
 # ─── MAIN FUNCTION ────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Build FAISS index from JSON chunks.")
-    parser.add_argument("--data",       type=Path, default=Path("rag_chunks.json"), help="Path to JSON with text+meta chunks.")
-    parser.add_argument("--index",      type=Path, default=Path("veritas_faiss.index"), help="Output FAISS index path.")
-    parser.add_argument("--meta",       type=Path, default=Path("veritas_metadata.pkl"), help="Output metadata pickle path.")
+    parser.add_argument("--data",       type=Path, default=Path("data/rag_chunks.json"), help="Path to JSON with text+meta chunks.")
+    parser.add_argument("--index",      type=Path, default=Path("models/veritas_faiss.index"), help="Output FAISS index path.")
+    parser.add_argument("--meta",       type=Path, default=Path("models/veritas_metadata.pkl"), help="Output metadata pickle path.")
     parser.add_argument("--model",      type=str, default="hkunlp/instructor-xl", help="SentenceTransformer model name.")
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size for embeddings.")
     parser.add_argument("--use-gpu",    action="store_true", help="Enable MPS GPU encoding if available.")
