@@ -19,6 +19,30 @@ import json
 import pickle
 import multiprocessing
 
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    RAG_CHUNKS_FILE,
+    FAISS_INDEX_FILE,
+    METADATA_FILE,
+    BUILD_INDEX_LOG,
+    DEFAULT_EMBEDDING_MODEL,
+    FALLBACK_EMBEDDING_MODEL,
+    ADVANCED_EMBEDDING_MODEL,
+    DEFAULT_FAISS_TYPE,
+    DEFAULT_NLIST,
+    DEFAULT_TRAIN_SAMPLE,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_WORKERS,
+    OMP_NUM_THREADS,
+    MKL_NUM_THREADS,
+    USE_GPU,
+    DEVICE,
+    ensure_directories
+)
+
 import numpy as np
 import faiss
 from tqdm import tqdm
@@ -29,7 +53,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler("logs/build_faiss_index.log"),
+        logging.FileHandler(BUILD_INDEX_LOG),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -43,13 +67,13 @@ def chunked(iterable, size):
 # ─── MODEL LOADER ─────────────────────────────────────────────────────────────
 def load_embedding_model(model_name: str, use_gpu: bool):
     import torch
-    device = "mps" if (use_gpu and sys.platform == "darwin" and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()) else "cpu"
+    device = DEVICE if use_gpu else "cpu"
     logging.info(f"Loading model '{model_name}' on device: {device}")
     try:
         return SentenceTransformer(model_name, device=device)
     except Exception as e:
         logging.warning(f"Failed to load '{model_name}': {e!r}")
-        fallback = "all-MiniLM-L6-v2"
+        fallback = FALLBACK_EMBEDDING_MODEL
         if model_name != fallback:
             logging.info(f"Falling back to '{fallback}'")
             return SentenceTransformer(fallback, device=device)
@@ -83,17 +107,24 @@ def build_faiss_index(dim: int, index_type: str, nlist: int):
 # ─── MAIN FUNCTION ────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Build FAISS index from JSON chunks.")
-    parser.add_argument("--data",       type=Path, default=Path("data/rag_chunks.json"), help="Path to JSON with text+meta chunks.")
-    parser.add_argument("--index",      type=Path, default=Path("models/veritas_faiss.index"), help="Output FAISS index path.")
-    parser.add_argument("--meta",       type=Path, default=Path("models/veritas_metadata.pkl"), help="Output metadata pickle path.")
-    parser.add_argument("--model",      type=str, default="hkunlp/instructor-xl", help="SentenceTransformer model name.")
-    parser.add_argument("--batch-size", type=int, default=64, help="Batch size for embeddings.")
+    parser.add_argument("--data",       type=Path, default=RAG_CHUNKS_FILE, help="Path to JSON with text+meta chunks.")
+    parser.add_argument("--index",      type=Path, default=FAISS_INDEX_FILE, help="Output FAISS index path.")
+    parser.add_argument("--meta",       type=Path, default=METADATA_FILE, help="Output metadata pickle path.")
+    parser.add_argument("--model",      type=str, default=ADVANCED_EMBEDDING_MODEL, help="SentenceTransformer model name.")
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size for embeddings.")
     parser.add_argument("--use-gpu",    action="store_true", help="Enable MPS GPU encoding if available.")
-    parser.add_argument("--faiss-type", choices=["flat","ivf"], default="flat", help="Type of FAISS index to build.")
-    parser.add_argument("--nlist",      type=int, default=100, help="Number of IVF cells (for ivf index).")
-    parser.add_argument("--train-sample", type=int, default=10000, help="Number of samples for training IVF (ivf only).")
-    parser.add_argument("--workers",    type=int, default=1, help="Number of parallel workers for embedding; >1 uses multiprocessing.")
+    parser.add_argument("--faiss-type", choices=["flat","ivf"], default=DEFAULT_FAISS_TYPE, help="Type of FAISS index to build.")
+    parser.add_argument("--nlist",      type=int, default=DEFAULT_NLIST, help="Number of IVF cells (for ivf index).")
+    parser.add_argument("--train-sample", type=int, default=DEFAULT_TRAIN_SAMPLE, help="Number of samples for training IVF (ivf only).")
+    parser.add_argument("--workers",    type=int, default=DEFAULT_WORKERS, help="Number of parallel workers for embedding; >1 uses multiprocessing.")
     args = parser.parse_args()
+
+    # Ensure directories exist
+    ensure_directories()
+
+    # Set environment variables for BLAS/MKL
+    os.environ["OMP_NUM_THREADS"] = OMP_NUM_THREADS
+    os.environ["MKL_NUM_THREADS"] = MKL_NUM_THREADS
 
     # Load data
     if not args.data.exists():

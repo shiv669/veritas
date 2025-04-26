@@ -10,18 +10,34 @@ in the current directory.
 
 import os
 import pickle
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    FAISS_INDEX_FILE,
+    METADATA_FILE,
+    ADVANCED_EMBEDDING_MODEL,
+    FALLBACK_EMBEDDING_MODEL,
+    OMP_NUM_THREADS,
+    MKL_NUM_THREADS,
+    ensure_directories
+)
 
 # 1) Force single‐threaded BLAS/MKL (to mirror your search script)
-os.environ["OMP_NUM_THREADS"] = os.getenv("OMP_NUM_THREADS", "1")
-os.environ["MKL_NUM_THREADS"] = os.getenv("MKL_NUM_THREADS", "1")
+os.environ["OMP_NUM_THREADS"] = OMP_NUM_THREADS
+os.environ["MKL_NUM_THREADS"] = MKL_NUM_THREADS
 
 # 2) Load your embedding model to discover its output dimension
 from sentence_transformers import SentenceTransformer
 try:
-    model = SentenceTransformer("hkunlp/instructor-xl", device="cpu")
+    model = SentenceTransformer(ADVANCED_EMBEDDING_MODEL, device="cpu")
 except Exception:
-    # fallback if you didn’t have instructor-xl locally
-    model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+    # fallback if you didn't have instructor-xl locally
+    model = SentenceTransformer(FALLBACK_EMBEDDING_MODEL, device="cpu")
 
 # 3) Get embedding dimension
 try:
@@ -37,12 +53,12 @@ import faiss
 index = faiss.IndexFlatIP(dim)
 
 # 5) Write out the stub index file
-faiss.write_index(index, "veritas_faiss.index")
+faiss.write_index(index, str(FAISS_INDEX_FILE))
 
 # 6) Write out an empty metadata list
-with open("veritas_metadata.pkl", "wb") as f:
+with open(METADATA_FILE, "wb") as f:
     pickle.dump([], f)
 
 print("✅ Created:")
-print("   • veritas_faiss.index")
-print("   • veritas_metadata.pkl")
+print(f"   • {FAISS_INDEX_FILE}")
+print(f"   • {METADATA_FILE}")

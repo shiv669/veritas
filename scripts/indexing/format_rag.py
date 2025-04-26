@@ -3,6 +3,18 @@ import hashlib
 from textwrap import wrap
 from pathlib import Path
 import argparse
+import sys
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    INPUT_DATA_FILE,
+    RAG_CHUNKS_FILE,
+    DEFAULT_CHUNK_SIZE,
+    ensure_directories
+)
 
 def generate_chunk_id(entry, i):
     base = entry.get("doi") or entry.get("coreId") or f"entry_{i}"
@@ -27,10 +39,13 @@ def preprocess_entry(entry, chunk_size=512):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input",  default="data/1.json", help="Path to input NDJSON file")
-    parser.add_argument("--output", default="data/rag_chunks.json", help="Output JSON file path")
-    parser.add_argument("--chunk_size", type=int, default=512, help="Max characters per chunk")
+    parser.add_argument("--input",  default=str(INPUT_DATA_FILE), help="Path to input NDJSON file")
+    parser.add_argument("--output", default=str(RAG_CHUNKS_FILE), help="Output JSON file path")
+    parser.add_argument("--chunk_size", type=int, default=DEFAULT_CHUNK_SIZE, help="Max characters per chunk")
     args = parser.parse_args()
+
+    # Ensure directories exist
+    ensure_directories()
 
     in_path = Path(args.input)
     out_path = Path(args.output)

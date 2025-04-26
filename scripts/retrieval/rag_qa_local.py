@@ -11,6 +11,24 @@ A minimal RAG QA loop without any external API:
 import os
 import argparse
 import pickle
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    FAISS_INDEX_FILE,
+    METADATA_FILE,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_GEN_MODEL,
+    DEFAULT_TOP_K,
+    MAX_NEW_TOKENS,
+    TEMPERATURE,
+    DEVICE,
+    ensure_directories
+)
 
 import faiss
 import numpy as np
@@ -18,12 +36,11 @@ from sentence_transformers import SentenceTransformer
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
-DEFAULT_INDEX   = "models/veritas_faiss.index"
-DEFAULT_META    = "models/veritas_metadata.pkl"
-DEFAULT_EMBED   = "all-MiniLM-L6-v2"
-DEFAULT_GEN     = "meta-llama/Llama-2-7b-chat-hf"  # your local model
-DEFAULT_TOP_K   = 5
-DEVICE          = "mps"  # or "cpu"
+DEFAULT_INDEX   = str(FAISS_INDEX_FILE)
+DEFAULT_META    = str(METADATA_FILE)
+DEFAULT_EMBED   = DEFAULT_EMBEDDING_MODEL
+DEFAULT_GEN     = DEFAULT_GEN_MODEL
+DEFAULT_TOP_K   = DEFAULT_TOP_K
 
 # ─── RETRIEVAL ─────────────────────────────────────────────────────────────────
 def retrieve(query, index_path, meta_path, embed_model, top_k):
@@ -74,8 +91,8 @@ def generate_answer_local(query, contexts, gen_model):
         tokenizer=tokenizer,
         device_map="auto",
         torch_dtype="auto",
-        max_new_tokens=256,
-        temperature=0.0
+        max_new_tokens=MAX_NEW_TOKENS,
+        temperature=TEMPERATURE
     )
     out = gen(prompt, return_full_text=False)[0]["generated_text"]
     # Trim off the prompt
@@ -91,6 +108,9 @@ def main():
     parser.add_argument("--query",       type=str, required=True,         help="Your question")
     parser.add_argument("--top_k",       type=int, default=DEFAULT_TOP_K, help="Number of passages to retrieve")
     args = parser.parse_args()
+
+    # Ensure directories exist
+    ensure_directories()
 
     # 1) Retrieve
     hits = retrieve(args.query, args.index, args.meta, args.embed_model, args.top_k)

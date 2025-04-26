@@ -12,10 +12,26 @@ FAISS RAG search script with:
 import os
 import sys
 import argparse
+from pathlib import Path
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    FAISS_INDEX_FILE,
+    METADATA_FILE,
+    DEFAULT_EMBEDDING_MODEL,
+    FALLBACK_EMBEDDING_MODEL,
+    DEFAULT_TOP_K,
+    OMP_NUM_THREADS,
+    MKL_NUM_THREADS,
+    ensure_directories
+)
 
 # ─── ENV VARS: limit BLAS threads to avoid segfaults ─────────────────────────
-os.environ["OMP_NUM_THREADS"] = os.getenv("OMP_NUM_THREADS", "1")
-os.environ["MKL_NUM_THREADS"] = os.getenv("MKL_NUM_THREADS", "1")
+os.environ["OMP_NUM_THREADS"] = OMP_NUM_THREADS
+os.environ["MKL_NUM_THREADS"] = MKL_NUM_THREADS
 
 try:
     import torch
@@ -35,7 +51,7 @@ def load_model(model_name: str):
         print(f"🔄 Loading model '{model_name}' on CPU…")
         return SentenceTransformer(model_name, device="cpu")
     except Exception as e:
-        fallback = "all-MiniLM-L6-v2"
+        fallback = FALLBACK_EMBEDDING_MODEL
         print(f"⚠️ Failed to load '{model_name}': {e!r}. Falling back to '{fallback}'…")
         return SentenceTransformer(fallback, device="cpu")
 
@@ -79,15 +95,15 @@ def main():
         description="Search a FAISS index with SentenceTransformers embeddings."
     )
     parser.add_argument(
-        "--index", type=str, default="models/veritas_faiss.index",
+        "--index", type=str, default=str(FAISS_INDEX_FILE),
         help="Path to the FAISS index file."
     )
     parser.add_argument(
-        "--meta", type=str, default="models/veritas_metadata.pkl",
+        "--meta", type=str, default=str(METADATA_FILE),
         help="Path to the pickled metadata file."
     )
     parser.add_argument(
-        "--model", type=str, default="all-MiniLM-L6-v2",
+        "--model", type=str, default=DEFAULT_EMBEDDING_MODEL,
         help="SentenceTransformer model name to use for query embeddings."
     )
     parser.add_argument(
@@ -95,10 +111,13 @@ def main():
         help="The search query string."
     )
     parser.add_argument(
-        "--top_k", type=int, default=5,
+        "--top_k", type=int, default=DEFAULT_TOP_K,
         help="Number of top results to return."
     )
     args = parser.parse_args()
+
+    # Ensure directories exist
+    ensure_directories()
 
     # Load components
     model = load_model(args.model)

@@ -1,5 +1,23 @@
 import os
 import pickle
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Import configuration
+from config import (
+    MISTRAL_FAISS_INDEX,
+    MISTRAL_METADATA_FILE,
+    MISTRAL_MODEL_DIR,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_TOP_K,
+    EMBED_PROMPT,
+    MAX_NEW_TOKENS,
+    TEMPERATURE,
+    ensure_directories
+)
 
 import gradio as gr
 import torch
@@ -12,24 +30,19 @@ from sentence_transformers import SentenceTransformer
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 # Retrieval artifacts
-INDEX_PATH = os.path.join(BASE_DIR, "veritas_faiss.index")
-# Updated to point to the original metadata with chunk text
-META_PATH  = os.path.abspath(
-    os.path.join(BASE_DIR, "../mistral-7b/veritas_metadata.pkl")
-)
+INDEX_PATH = str(MISTRAL_FAISS_INDEX)  # Convert Path to string
+META_PATH = str(MISTRAL_METADATA_FILE)  # Convert Path to string
 
 # Model artifacts
-MODEL_PATH = BASE_DIR  # assumes tokenizer & model live here
+MODEL_PATH = MISTRAL_MODEL_DIR  # assumes tokenizer & model live here
 
 # Retrieval settings
-TOP_K = 5
-EMBED_PROMPT = "Represent the scientific passage for retrieval: {}"
-
-# Generation settings
-MAX_NEW_TOKENS = 300
-TEMPERATURE    = 0.7
+TOP_K = DEFAULT_TOP_K
 
 # ─── Load Retrieval Components ─────────────────────────────────────────────────
+
+# Ensure directories exist
+ensure_directories()
 
 index = faiss.read_index(INDEX_PATH)
 print(f"[RAG] Index dimensionality: {index.d}")
@@ -37,7 +50,7 @@ print(f"[RAG] Index dimensionality: {index.d}")
 with open(META_PATH, "rb") as f:
     metas = pickle.load(f)
 
-encoder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+encoder = SentenceTransformer(DEFAULT_EMBEDDING_MODEL)
 
 # ─── Load Mistral Model ────────────────────────────────────────────────────────
 
