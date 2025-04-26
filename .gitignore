@@ -16,9 +16,16 @@ data/**/*.json
 data/**/*.csv
 data/**/*.parquet
 
+# Intermediate/generated files
+scripts/rag_chunks.json
+
 # Logs
 logs/*.log
 scripts/**/*.log
+
+# macOS metadata files
+.DS_Store
+**/._*
 
 # Python artifacts
 __pycache__/
@@ -32,9 +39,6 @@ __pycache__/
 .venv/
 env/
 venv/
-
-# macOS files
-.DS_Store
 
 # IDE and Editor files
 .vscode/
