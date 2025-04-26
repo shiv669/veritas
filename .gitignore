@@ -1,0 +1,43 @@
+# Models and checkpoints
+models/**/*.safetensors
+models/**/*.index.json
+models/**/*.model
+models/**/*.json
+models/**/*.pkl
+models/**/*.bin
+models/**/*.params.json
+
+# Index files (large binary files, regenerate locally)
+**/*.index
+**/*.pkl
+
+# Data files (large or sensitive data, regenerate locally)
+data/**/*.json
+data/**/*.csv
+data/**/*.parquet
+
+# Logs
+logs/*.log
+scripts/**/*.log
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.venv/
+env/
+venv/
+
+# macOS files
+.DS_Store
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
