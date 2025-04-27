@@ -9,6 +9,72 @@ This file contains all configuration parameters used across the project.
 import os
 from pathlib import Path
 
+# Base directory
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Data directories
+DATA_DIR = BASE_DIR / "data"
+LOGS_DIR = BASE_DIR / "logs"
+MODELS_DIR = BASE_DIR / "models"
+
+# Create directories if they don't exist
+for directory in [DATA_DIR, LOGS_DIR, MODELS_DIR]:
+    directory.mkdir(exist_ok=True)
+
+# Model configurations
+MODEL_CONFIG = {
+    "default": {
+        "model_name": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+    }
+}
+
+# API configurations
+API_CONFIG = {
+    "timeout": 30,  # seconds
+    "max_retries": 3,
+    "retry_delay": 1  # seconds
+}
+
+# Logging configurations
+LOG_CONFIG = {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "date_format": "%Y-%m-%d %H:%M:%S"
+}
+
+# Environment variables (to be loaded from .env file if exists)
+API_KEY = os.getenv("VERITAS_API_KEY")
+ENVIRONMENT = os.getenv("VERITAS_ENV", "development")
+
+# Development-specific settings
+DEBUG = ENVIRONMENT == "development"
+
+# Cache settings
+CACHE_CONFIG = {
+    "enabled": True,
+    "max_size": 1000,
+    "ttl": 3600  # Time to live in seconds
+}
+
+# Security settings
+SECURITY_CONFIG = {
+    "ssl_verify": True,
+    "allowed_hosts": ["*"] if DEBUG else [],
+    "cors_origins": ["*"] if DEBUG else []
+}
+
+# Feature flags
+FEATURES = {
+    "enable_caching": True,
+    "enable_logging": True,
+    "enable_monitoring": True
+}
+
 # ─── Project Structure ──────────────────────────────────────────────────────────
 # Base directories
 BASE_DIR = Path(__file__).parent.parent.absolute()
