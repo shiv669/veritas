@@ -11,7 +11,7 @@ from pathlib import Path
 
 # ─── Project Structure ──────────────────────────────────────────────────────────
 # Base directories
-BASE_DIR = Path(__file__).parent.absolute()
+BASE_DIR = Path(__file__).parent.parent.absolute()
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 LOGS_DIR = BASE_DIR / "logs"
@@ -73,22 +73,4 @@ MKL_NUM_THREADS = os.getenv("MKL_NUM_THREADS", "1")
 
 # Device settings
 USE_GPU = True  # Set to False to force CPU
-DEVICE = "mps" if USE_GPU and os.environ.get("USE_MPS", "1") == "1" else "cpu"
-
-# ─── Utility Functions ─────────────────────────────────────────────────────────
-def get_model_path(model_name):
-    """Get the path to a model file."""
-    return MODELS_DIR / model_name
-
-def get_data_path(file_name):
-    """Get the path to a data file."""
-    return DATA_DIR / file_name
-
-def get_log_path(file_name):
-    """Get the path to a log file."""
-    return LOGS_DIR / file_name
-
-def ensure_directories():
-    """Ensure all required directories exist."""
-    for directory in [DATA_DIR, MODELS_DIR, LOGS_DIR, SCRIPTS_DIR]:
-        directory.mkdir(exist_ok=True) 
+DEVICE = "mps" if USE_GPU and os.environ.get("USE_MPS", "1") == "1" else "cpu" 

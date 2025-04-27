@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 # Import configuration
-from config import (
+from veritas import (
     MISTRAL_FAISS_INDEX,
     MISTRAL_METADATA_FILE,
     MISTRAL_MODEL_DIR,
@@ -16,7 +16,9 @@ from config import (
     EMBED_PROMPT,
     MAX_NEW_TOKENS,
     TEMPERATURE,
-    ensure_directories
+    ensure_directories,
+    resolve_path,
+    ensure_parent_dirs
 )
 
 import gradio as gr
@@ -27,14 +29,12 @@ from sentence_transformers import SentenceTransformer
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
 # Retrieval artifacts
-INDEX_PATH = str(MISTRAL_FAISS_INDEX)  # Convert Path to string
-META_PATH = str(MISTRAL_METADATA_FILE)  # Convert Path to string
+INDEX_PATH = resolve_path(MISTRAL_FAISS_INDEX)
+META_PATH = resolve_path(MISTRAL_METADATA_FILE)
 
 # Model artifacts
-MODEL_PATH = MISTRAL_MODEL_DIR  # assumes tokenizer & model live here
+MODEL_PATH = resolve_path(MISTRAL_MODEL_DIR)
 
 # Retrieval settings
 TOP_K = DEFAULT_TOP_K
@@ -43,8 +43,10 @@ TOP_K = DEFAULT_TOP_K
 
 # Ensure directories exist
 ensure_directories()
+ensure_parent_dirs(INDEX_PATH)
+ensure_parent_dirs(META_PATH)
 
-index = faiss.read_index(INDEX_PATH)
+index = faiss.read_index(str(INDEX_PATH))
 print(f"[RAG] Index dimensionality: {index.d}")
 
 with open(META_PATH, "rb") as f:
@@ -54,9 +56,9 @@ encoder = SentenceTransformer(DEFAULT_EMBEDDING_MODEL)
 
 # ─── Load Mistral Model ────────────────────────────────────────────────────────
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
+tokenizer = AutoTokenizer.from_pretrained(str(MODEL_PATH), local_files_only=True)
 model     = AutoModelForCausalLM.from_pretrained(
-    MODEL_PATH,
+    str(MODEL_PATH),
     local_files_only=True,
     torch_dtype=torch.float32,
 )

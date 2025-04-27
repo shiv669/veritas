@@ -2,28 +2,26 @@
 """
 build_faiss_index.py
 
-Enhanced FAISS index builder with:
- - CLI configurability via argparse
- - Optional GPU (MPS) acceleration
- - Choice of Flat or IVF+PQ indices
- - Dynamic batching and overall progress bars
- - Robust logging for errors and key steps
- - Optional multiprocessing for parallel encoding
+Build a FAISS index from RAG chunks with:
+ - Single-threaded BLAS/MKL to prevent segfaults
+ - Optional PyTorch thread limit
+ - Encapsulated main() to avoid unintended parallel init
+ - CLI support for data, index, meta, model, and FAISS parameters
 """
 import os
 import sys
+import json
+import pickle
 import argparse
 import logging
 from pathlib import Path
-import json
-import pickle
-import multiprocessing
+from typing import List, Dict, Any, Optional, Union
 
 # Add the project root to the Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 # Import configuration
-from config import (
+from veritas.config import (
     RAG_CHUNKS_FILE,
     FAISS_INDEX_FILE,
     METADATA_FILE,
@@ -40,164 +38,217 @@ from config import (
     MKL_NUM_THREADS,
     USE_GPU,
     DEVICE,
-    ensure_directories
+    ensure_directories,
+    resolve_path,
+    ensure_parent_dirs
 )
 
-import numpy as np
+# ─── ENV VARS: limit BLAS threads to avoid segfaults ─────────────────────────
+os.environ["OMP_NUM_THREADS"] = str(OMP_NUM_THREADS)
+os.environ["MKL_NUM_THREADS"] = str(MKL_NUM_THREADS)
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except ImportError:
+    pass
+
 import faiss
+import numpy as np
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
-# ─── LOGGING ────────────────────────────────────────────────────────────────
+# ─── LOGGING ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(BUILD_INDEX_LOG),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler()
     ]
 )
-
-# ─── UTILITIES ───────────────────────────────────────────────────────────────
-def chunked(iterable, size):
-    """Yield successive chunks from iterable of given size."""
-    for i in range(0, len(iterable), size):
-        yield iterable[i : i + size]
+logger = logging.getLogger(__name__)
 
 # ─── MODEL LOADER ─────────────────────────────────────────────────────────────
-def load_embedding_model(model_name: str, use_gpu: bool):
-    import torch
-    device = DEVICE if use_gpu else "cpu"
-    logging.info(f"Loading model '{model_name}' on device: {device}")
+def load_embedding_model(model_name: str) -> SentenceTransformer:
+    """Load the embedding model with fallback."""
     try:
-        return SentenceTransformer(model_name, device=device)
+        logger.info(f"Loading model '{model_name}' on {DEVICE}...")
+        return SentenceTransformer(model_name, device=DEVICE)
     except Exception as e:
-        logging.warning(f"Failed to load '{model_name}': {e!r}")
         fallback = FALLBACK_EMBEDDING_MODEL
-        if model_name != fallback:
-            logging.info(f"Falling back to '{fallback}'")
-            return SentenceTransformer(fallback, device=device)
-        raise
+        logger.warning(f"Failed to load '{model_name}': {e!r}. Falling back to '{fallback}'...")
+        return SentenceTransformer(fallback, device=DEVICE)
 
-# ─── WORKER INIT & EMBED ──────────────────────────────────────────────────────
-_model = None
+# ─── FAISS INDEX BUILDER ──────────────────────────────────────────────────────
+def build_faiss_index(
+    data_file: str,
+    index_file: str,
+    meta_file: str,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    faiss_type: str = DEFAULT_FAISS_TYPE,
+    nlist: int = DEFAULT_NLIST,
+    train_sample: int = DEFAULT_TRAIN_SAMPLE,
+    workers: int = DEFAULT_WORKERS
+) -> None:
+    """
+    Build a FAISS index from RAG chunks.
+    
+    Args:
+        data_file: Path to the RAG chunks JSON file
+        index_file: Path to save the FAISS index
+        meta_file: Path to save the metadata
+        model_name: Name of the SentenceTransformer model
+        batch_size: Batch size for encoding
+        faiss_type: Type of FAISS index (flat, ivf)
+        nlist: Number of clusters for IVF index
+        train_sample: Number of samples to use for training
+        workers: Number of workers for encoding
+    """
+    # Load data
+    logger.info(f"Loading data from {data_file}...")
+    with open(data_file, "r", encoding="utf-8") as f:
+        chunks = json.load(f)
+    
+    if not chunks:
+        logger.error("No chunks found in the data file.")
+        return
+    
+    logger.info(f"Loaded {len(chunks)} chunks.")
+    
+    # Load model
+    model = load_embedding_model(model_name)
+    
+    # Detect embedding dimension
+    sample_text = chunks[0]["text"]
+    sample_embedding = model.encode(sample_text, normalize_embeddings=True)
+    embedding_dim = sample_embedding.shape[0]
+    logger.info(f"Embedding dimension: {embedding_dim}")
+    
+    # Create FAISS index
+    if faiss_type == "flat":
+        logger.info("Creating FLAT index...")
+        index = faiss.IndexFlatL2(embedding_dim)
+    elif faiss_type == "ivf":
+        logger.info(f"Creating IVF index with {nlist} clusters...")
+        quantizer = faiss.IndexFlatL2(embedding_dim)
+        index = faiss.IndexIVFFlat(quantizer, embedding_dim, nlist, faiss.METRIC_L2)
+        
+        # Train the index
+        logger.info(f"Training index with {min(train_sample, len(chunks))} samples...")
+        train_texts = [chunk["text"] for chunk in chunks[:train_sample]]
+        train_embeddings = model.encode(train_texts, normalize_embeddings=True)
+        index.train(train_embeddings)
+    else:
+        logger.error(f"Unknown FAISS type: {faiss_type}")
+        return
+    
+    # Encode chunks in batches
+    logger.info(f"Encoding {len(chunks)} chunks in batches of {batch_size}...")
+    metadata = []
+    
+    for i in tqdm(range(0, len(chunks), batch_size)):
+        batch = chunks[i:i+batch_size]
+        batch_texts = [chunk["text"] for chunk in batch]
+        
+        # Encode batch
+        batch_embeddings = model.encode(
+            batch_texts, 
+            normalize_embeddings=True,
+            batch_size=batch_size,
+            show_progress_bar=False,
+            num_workers=workers
+        )
+        
+        # Add to index
+        if faiss_type == "flat":
+            index.add(batch_embeddings)
+        else:  # ivf
+            index.add_with_ids(batch_embeddings, np.arange(i, i+len(batch), dtype=np.int64))
+        
+        # Collect metadata
+        for chunk in batch:
+            metadata.append({
+                "id": chunk.get("id", ""),
+                "title": chunk.get("title", ""),
+                "authors": chunk.get("authors", []),
+                "year": chunk.get("year", ""),
+                "source": chunk.get("source", ""),
+                "text": chunk.get("text", "")
+            })
+    
+    # Save index and metadata
+    logger.info(f"Saving index to {index_file}...")
+    faiss.write_index(index, index_file)
+    
+    logger.info(f"Saving metadata to {meta_file}...")
+    with open(meta_file, "wb") as f:
+        pickle.dump(metadata, f)
+    
+    logger.info(f"Index built successfully with {index.ntotal} vectors.")
 
-def init_worker(model_name, use_gpu):
-    """Initialize model in each worker process."""
-    global _model
-    _model = load_embedding_model(model_name, use_gpu)
-
-def embed_batch(batch):
-    """Encode a batch of texts in a worker process."""
-    global _model
-    embs = _model.encode(batch, normalize_embeddings=True)
-    return np.vstack(embs).astype("float32")
-
-# ─── INDEX FACTORY ─────────────────────────────────────────────────────────────
-def build_faiss_index(dim: int, index_type: str, nlist: int):
-    if index_type == "flat":
-        logging.info("Using IndexFlatIP")
-        return faiss.IndexFlatIP(dim)
-    # IVF+PQ
-    logging.info(f"Using IndexIVFPQ with nlist={nlist}")
-    quantizer = faiss.IndexFlatIP(dim)
-    index = faiss.IndexIVFPQ(quantizer, dim, nlist, 8, 8)
-    return index
-
-# ─── MAIN FUNCTION ────────────────────────────────────────────────────────────
+# ─── MAIN ENTRY ───────────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="Build FAISS index from JSON chunks.")
-    parser.add_argument("--data",       type=Path, default=RAG_CHUNKS_FILE, help="Path to JSON with text+meta chunks.")
-    parser.add_argument("--index",      type=Path, default=FAISS_INDEX_FILE, help="Output FAISS index path.")
-    parser.add_argument("--meta",       type=Path, default=METADATA_FILE, help="Output metadata pickle path.")
-    parser.add_argument("--model",      type=str, default=ADVANCED_EMBEDDING_MODEL, help="SentenceTransformer model name.")
-    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size for embeddings.")
-    parser.add_argument("--use-gpu",    action="store_true", help="Enable MPS GPU encoding if available.")
-    parser.add_argument("--faiss-type", choices=["flat","ivf"], default=DEFAULT_FAISS_TYPE, help="Type of FAISS index to build.")
-    parser.add_argument("--nlist",      type=int, default=DEFAULT_NLIST, help="Number of IVF cells (for ivf index).")
-    parser.add_argument("--train-sample", type=int, default=DEFAULT_TRAIN_SAMPLE, help="Number of samples for training IVF (ivf only).")
-    parser.add_argument("--workers",    type=int, default=DEFAULT_WORKERS, help="Number of parallel workers for embedding; >1 uses multiprocessing.")
+    parser = argparse.ArgumentParser(
+        description="Build a FAISS index from RAG chunks."
+    )
+    parser.add_argument(
+        "--data", type=str, default=str(RAG_CHUNKS_FILE),
+        help="Path to the RAG chunks JSON file."
+    )
+    parser.add_argument(
+        "--index", type=str, default=str(FAISS_INDEX_FILE),
+        help="Path to save the FAISS index."
+    )
+    parser.add_argument(
+        "--meta", type=str, default=str(METADATA_FILE),
+        help="Path to save the metadata."
+    )
+    parser.add_argument(
+        "--model", type=str, default=DEFAULT_EMBEDDING_MODEL,
+        help="SentenceTransformer model name to use for embeddings."
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
+        help="Batch size for encoding."
+    )
+    parser.add_argument(
+        "--faiss-type", type=str, default=DEFAULT_FAISS_TYPE,
+        choices=["flat", "ivf"],
+        help="Type of FAISS index to build."
+    )
+    parser.add_argument(
+        "--nlist", type=int, default=DEFAULT_NLIST,
+        help="Number of clusters for IVF index."
+    )
+    parser.add_argument(
+        "--train-sample", type=int, default=DEFAULT_TRAIN_SAMPLE,
+        help="Number of samples to use for training."
+    )
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_WORKERS,
+        help="Number of workers for encoding."
+    )
     args = parser.parse_args()
 
     # Ensure directories exist
     ensure_directories()
-
-    # Set environment variables for BLAS/MKL
-    os.environ["OMP_NUM_THREADS"] = OMP_NUM_THREADS
-    os.environ["MKL_NUM_THREADS"] = MKL_NUM_THREADS
-
-    # Load data
-    if not args.data.exists():
-        logging.error(f"Data file not found: {args.data}")
-        sys.exit(1)
-    with open(args.data, "r", encoding="utf-8") as f:
-        chunks = json.load(f)
-    texts = [c["text"] for c in chunks]
-    metas = [{**c.get("meta",{}), "id": c.get("id")} for c in chunks]
-    total = len(texts)
-    logging.info(f"Loaded {total} chunks.")
-
-    # Prepare model(s)
-    if args.workers == 1:
-        model = load_embedding_model(args.model, args.use_gpu)
-        dim = model.get_sentence_embedding_dimension()
-    else:
-        # spawn one temp model for dimension
-        temp_model = load_embedding_model(args.model, args.use_gpu)
-        dim = temp_model.get_sentence_embedding_dimension()
-    logging.info(f"Embedding dimension: {dim}")
+    ensure_parent_dirs(resolve_path(args.index))
+    ensure_parent_dirs(resolve_path(args.meta))
 
     # Build index
-    index = build_faiss_index(dim, args.faiss_type, args.nlist)
-
-    # IVF training if required
-    if args.faiss_type == "ivf":
-        sample_count = min(args.train_sample, total)
-        logging.info(f"Training IVF on {sample_count} samples.")
-        sample_texts = texts[:sample_count]
-        if args.workers == 1:
-            sample_embs = model.encode(sample_texts, normalize_embeddings=True, show_progress_bar=True)
-            index.train(np.vstack(sample_embs).astype("float32"))
-        else:
-            with multiprocessing.Pool(args.workers, initializer=init_worker, initargs=(args.model, args.use_gpu)) as pool:
-                batches = list(chunked(sample_texts, args.batch_size))
-                embs_list = pool.map(embed_batch, batches)
-                train_embs = np.vstack(embs_list)[:sample_count]
-                index.train(train_embs)
-
-    # Embedding & indexing
-    logging.info("Starting embedding & indexing...")
-    if args.workers == 1:
-        with tqdm(total=total, desc="Embedding & indexing") as pbar:
-            for batch in chunked(texts, args.batch_size):
-                try:
-                    embs = model.encode(batch, normalize_embeddings=True)
-                    index.add(np.vstack(embs).astype("float32"))
-                except Exception:
-                    logging.exception("Failed to embed batch start=%d", pbar.n)
-                pbar.update(len(batch))
-    else:
-        with multiprocessing.Pool(args.workers, initializer=init_worker, initargs=(args.model, args.use_gpu)) as pool, \
-             tqdm(total=total, desc="Embedding & indexing") as pbar:
-            for embs in pool.imap(embed_batch, chunked(texts, args.batch_size)):
-                index.add(embs)
-                pbar.update(len(embs))
-
-    # Final checks and save
-    if index.ntotal != total:
-        logging.error(f"Index size {index.ntotal} != metadata size {total}")
-        sys.exit(1)
-    logging.info(f"Saving index to {args.index}")
-    faiss.write_index(index, str(args.index))
-    logging.info(f"Saving metadata to {args.meta}")
-    with open(args.meta, "wb") as f:
-        pickle.dump(metas, f)
-    logging.info("✅ Build complete.")
+    build_faiss_index(
+        data_file=args.data,
+        index_file=args.index,
+        meta_file=args.meta,
+        model_name=args.model,
+        batch_size=args.batch_size,
+        faiss_type=args.faiss_type,
+        nlist=args.nlist,
+        train_sample=args.train_sample,
+        workers=args.workers
+    )
 
 if __name__ == "__main__":
-    # optionally remove BLAS caps if desired:
-    # os.environ.pop("OMP_NUM_THREADS", None)
-    # os.environ.pop("MKL_NUM_THREADS", None)
-    import torch
-    torch.set_num_threads(os.cpu_count() or 1)
     main()

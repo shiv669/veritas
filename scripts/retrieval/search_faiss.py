@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 # Import configuration
-from config import (
+from veritas import (
     FAISS_INDEX_FILE,
     METADATA_FILE,
     DEFAULT_EMBEDDING_MODEL,
@@ -26,12 +26,14 @@ from config import (
     DEFAULT_TOP_K,
     OMP_NUM_THREADS,
     MKL_NUM_THREADS,
-    ensure_directories
+    ensure_directories,
+    resolve_path,
+    ensure_parent_dirs
 )
 
 # ─── ENV VARS: limit BLAS threads to avoid segfaults ─────────────────────────
-os.environ["OMP_NUM_THREADS"] = OMP_NUM_THREADS
-os.environ["MKL_NUM_THREADS"] = MKL_NUM_THREADS
+os.environ["OMP_NUM_THREADS"] = str(OMP_NUM_THREADS)
+os.environ["MKL_NUM_THREADS"] = str(MKL_NUM_THREADS)
 
 try:
     import torch
@@ -45,15 +47,14 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 # ─── MODEL LOADER ─────────────────────────────────────────────────────────────
-def load_model(model_name: str):
-    """Load specified model, fallback to MiniLM if it fails."""
+def load_model(model_name: str) -> SentenceTransformer:
+    """Load the embedding model with fallback."""
     try:
-        print(f"🔄 Loading model '{model_name}' on CPU…")
-        return SentenceTransformer(model_name, device="cpu")
+        return SentenceTransformer(model_name)
     except Exception as e:
-        fallback = FALLBACK_EMBEDDING_MODEL
-        print(f"⚠️ Failed to load '{model_name}': {e!r}. Falling back to '{fallback}'…")
-        return SentenceTransformer(fallback, device="cpu")
+        print(f"Error loading {model_name}: {e}")
+        print(f"Falling back to {FALLBACK_EMBEDDING_MODEL}")
+        return SentenceTransformer(FALLBACK_EMBEDDING_MODEL)
 
 # ─── LOAD INDEX & METADATA ────────────────────────────────────────────────────
 def load_index_and_meta(index_path: str, meta_path: str):
@@ -107,10 +108,6 @@ def main():
         help="SentenceTransformer model name to use for query embeddings."
     )
     parser.add_argument(
-        "--query", type=str, required=True,
-        help="The search query string."
-    )
-    parser.add_argument(
         "--top_k", type=int, default=DEFAULT_TOP_K,
         help="Number of top results to return."
     )
@@ -118,6 +115,8 @@ def main():
 
     # Ensure directories exist
     ensure_directories()
+    ensure_parent_dirs(resolve_path(args.index))
+    ensure_parent_dirs(resolve_path(args.meta))
 
     # Load components
     model = load_model(args.model)
@@ -128,13 +127,28 @@ def main():
         print("⚠️ Index or metadata is empty. Run `build_faiss_index.py` to populate your index.")
         sys.exit(0)
 
-    # Run query
-    results = query_rag(model, index, metas, args.query, args.top_k)
-    if not results:
-        print("No results found.")
-        return
-    for r in results:
-        print(f"[{r['score']:.4f}] {r['id']} — {r['title']} ({r['year']})")
+    # Interactive search loop
+    while True:
+        query = input("\nEnter your search query (or 'q' to quit): ")
+        if query.lower() == 'q':
+            break
+
+        # Encode the query
+        query_vector = model.encode([query])[0].astype('float32')
+
+        # Search the index
+        distances, indices = index.search(query_vector.reshape(1, -1), args.top_k)
+
+        # Print results
+        print("\nSearch results:")
+        for i, (idx, dist) in enumerate(zip(indices[0], distances[0])):
+            if idx < len(metas):
+                result = metas[idx]
+                print(f"\n{i+1}. Score: {1 - dist:.4f}")
+                print(f"Text: {result.get('text', '')[:200]}...")
+                print(f"Source: {result.get('source', 'Unknown')}")
+            else:
+                print(f"\n{i+1}. Invalid index: {idx}")
 
 if __name__ == "__main__":
     main()
