@@ -11,17 +11,21 @@ models/**/*.params.json
 **/*.index
 **/*.pkl
 
-# Data files (large or sensitive data, regenerate locally)
-data/**/*.json
-data/**/*.csv
-data/**/*.parquet
+# Data directory (all contents)
+data/
+data/**/*
+
+# Logs directory (all contents)
+logs/
+logs/**/*
+scripts/indexing/build_faiss_index.log
+
+# Gradio directory (all contents)
+.gradio/
+.gradio/**/*
 
 # Intermediate/generated files
 scripts/rag_chunks.json
-
-# Logs
-logs/*.log
-scripts/**/*.log
 
 # macOS metadata files
 .DS_Store
