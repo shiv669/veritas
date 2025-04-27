@@ -2,153 +2,275 @@
 """
 search_faiss.py
 
-FAISS RAG search script with:
- - Single-threaded BLAS/MKL to prevent segfaults
- - Optional PyTorch thread limit
- - Encapsulated main() to avoid unintended parallel init
- - CLI support for index, meta, model, query, and top-k
- - Early exit if index or metadata is empty
+Search FAISS index with support for different search strategies and output formats.
 """
-import os
-import sys
-import argparse
+
+import json
+import logging
 from pathlib import Path
+from typing import Dict, List, Optional, Union, Any
+import numpy as np
+import faiss
+from dataclasses import dataclass
+from enum import Enum
+import sys
 
-# Add the project root to the Python path
+# Add project root to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
-
-# Import configuration
-from veritas import (
-    FAISS_INDEX_FILE,
-    METADATA_FILE,
-    DEFAULT_EMBEDDING_MODEL,
-    FALLBACK_EMBEDDING_MODEL,
-    DEFAULT_TOP_K,
-    OMP_NUM_THREADS,
-    MKL_NUM_THREADS,
-    ensure_directories,
-    resolve_path,
-    ensure_parent_dirs
+from veritas.config import (
+    MODELS_DIR, LOGS_DIR,
+    DEFAULT_TOP_K, EMBED_PROMPT,
+    DEFAULT_EMBEDDING_MODEL
 )
 
-# ─── ENV VARS: limit BLAS threads to avoid segfaults ─────────────────────────
-os.environ["OMP_NUM_THREADS"] = str(OMP_NUM_THREADS)
-os.environ["MKL_NUM_THREADS"] = str(MKL_NUM_THREADS)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOGS_DIR / "search_faiss.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-try:
-    import torch
-    torch.set_num_threads(1)
-except ImportError:
-    pass
+class SearchStrategy(Enum):
+    """Available search strategies."""
+    EXACT = "exact"  # Exact search with L2 distance
+    APPROXIMATE = "approximate"  # Approximate search with IVF
+    HNSW = "hnsw"  # HNSW search
 
-import faiss
-import pickle
-import numpy as np
-from sentence_transformers import SentenceTransformer
+class OutputFormat(Enum):
+    """Available output formats."""
+    JSON = "json"
+    TEXT = "text"
+    MARKDOWN = "markdown"
 
-# ─── MODEL LOADER ─────────────────────────────────────────────────────────────
-def load_model(model_name: str) -> SentenceTransformer:
-    """Load the embedding model with fallback."""
-    try:
-        return SentenceTransformer(model_name)
-    except Exception as e:
-        print(f"Error loading {model_name}: {e}")
-        print(f"Falling back to {FALLBACK_EMBEDDING_MODEL}")
-        return SentenceTransformer(FALLBACK_EMBEDDING_MODEL)
+@dataclass
+class SearchConfig:
+    """Configuration for FAISS search."""
+    strategy: SearchStrategy = SearchStrategy.EXACT
+    top_k: int = DEFAULT_TOP_K
+    nprobe: int = 10  # For IVF search
+    ef_search: int = 64  # For HNSW search
 
-# ─── LOAD INDEX & METADATA ────────────────────────────────────────────────────
-def load_index_and_meta(index_path: str, meta_path: str):
-    if not os.path.exists(index_path):
-        print(f"Index file not found: {index_path}")
-        sys.exit(1)
-    if not os.path.exists(meta_path):
-        print(f"Metadata file not found: {meta_path}")
-        sys.exit(1)
-    index = faiss.read_index(index_path)
-    with open(meta_path, "rb") as f:
-        metas = pickle.load(f)
-    return index, metas
+@dataclass
+class FilterConfig:
+    """Configuration for result filtering."""
+    min_score: float = 0.0
+    max_score: float = float('inf')
+    metadata_filters: Dict[str, Any] = None
 
-# ─── QUERY FUNCTION ───────────────────────────────────────────────────────────
-def query_rag(model, index, metas, question: str, top_k: int=5):
-    prompt = f"Represent the scientific passage for retrieval: {question}"
-    q_emb = model.encode([prompt], normalize_embeddings=True)
-    q_emb = np.asarray(q_emb, dtype="float32")
-    scores, idxs = index.search(q_emb, top_k)
-    results = []
-    for score, i in zip(scores[0], idxs[0]):
-        if i < 0 or i >= len(metas):
+class FAISSSearcher:
+    """Searcher for FAISS index with different strategies."""
+    
+    def __init__(self, index: faiss.Index, metadata: Dict):
+        self.index = index
+        self.metadata = metadata
+        self.config = SearchConfig()
+    
+    def set_config(self, config: SearchConfig):
+        """Set search configuration."""
+        self.config = config
+        
+        # Configure index parameters based on strategy
+        if isinstance(self.index, faiss.IndexIVF):
+            self.index.nprobe = config.nprobe
+        elif isinstance(self.index, faiss.IndexHNSW):
+            self.index.setEfSearch(config.ef_search)
+    
+    def search(self, query_vector: np.ndarray) -> tuple:
+        """Search the index with the configured strategy."""
+        if self.config.strategy == SearchStrategy.EXACT:
+            return self.index.search(query_vector, self.config.top_k)
+        elif self.config.strategy == SearchStrategy.APPROXIMATE:
+            if not isinstance(self.index, faiss.IndexIVF):
+                raise ValueError("Approximate search requires an IVF index")
+            return self.index.search(query_vector, self.config.top_k)
+        elif self.config.strategy == SearchStrategy.HNSW:
+            if not isinstance(self.index, faiss.IndexHNSW):
+                raise ValueError("HNSW search requires an HNSW index")
+            return self.index.search(query_vector, self.config.top_k)
+        else:
+            raise ValueError(f"Unsupported search strategy: {self.config.strategy}")
+
+class ResultFormatter:
+    """Formatter for search results in different formats."""
+    
+    @staticmethod
+    def format_json(results: List[Dict]) -> str:
+        """Format results as JSON."""
+        return json.dumps(results, indent=2)
+    
+    @staticmethod
+    def format_text(results: List[Dict]) -> str:
+        """Format results as plain text."""
+        output = []
+        for i, result in enumerate(results, 1):
+            output.append(f"Result {i} (Score: {result['score']:.4f}):")
+            output.append(f"Text: {result['text']}")
+            if result.get('metadata'):
+                output.append("Metadata:")
+                for key, value in result['metadata'].items():
+                    output.append(f"  {key}: {value}")
+            output.append("")
+        return "\n".join(output)
+    
+    @staticmethod
+    def format_markdown(results: List[Dict]) -> str:
+        """Format results as markdown."""
+        output = []
+        for i, result in enumerate(results, 1):
+            output.append(f"## Result {i} (Score: {result['score']:.4f})")
+            output.append("")
+            output.append(result['text'])
+            if result.get('metadata'):
+                output.append("")
+                output.append("### Metadata")
+                for key, value in result['metadata'].items():
+                    output.append(f"- **{key}**: {value}")
+            output.append("")
+        return "\n".join(output)
+
+def filter_results(
+    results: List[Dict],
+    filter_config: FilterConfig
+) -> List[Dict]:
+    """Filter search results based on configuration."""
+    filtered = []
+    for result in results:
+        # Score filtering
+        if not (filter_config.min_score <= result['score'] <= filter_config.max_score):
             continue
-        m = metas[i]
-        results.append({
-            "score": float(score),
-            "id":    m.get("id"),
-            "title": m.get("title"),
-            "authors": m.get("authors", []),
-            "year":  m.get("year"),
-            "source": m.get("source", ""),
-        })
-    return results
+        
+        # Metadata filtering
+        if filter_config.metadata_filters:
+            metadata = result.get('metadata', {})
+            matches = True
+            for key, value in filter_config.metadata_filters.items():
+                if key not in metadata or metadata[key] != value:
+                    matches = False
+                    break
+            if not matches:
+                continue
+        
+        filtered.append(result)
+    
+    return filtered
 
-# ─── MAIN ENTRY ───────────────────────────────────────────────────────────────
-def main():
-    parser = argparse.ArgumentParser(
-        description="Search a FAISS index with SentenceTransformers embeddings."
-    )
-    parser.add_argument(
-        "--index", type=str, default=str(FAISS_INDEX_FILE),
-        help="Path to the FAISS index file."
-    )
-    parser.add_argument(
-        "--meta", type=str, default=str(METADATA_FILE),
-        help="Path to the pickled metadata file."
-    )
-    parser.add_argument(
-        "--model", type=str, default=DEFAULT_EMBEDDING_MODEL,
-        help="SentenceTransformer model name to use for query embeddings."
-    )
-    parser.add_argument(
-        "--top_k", type=int, default=DEFAULT_TOP_K,
-        help="Number of top results to return."
-    )
-    args = parser.parse_args()
-
-    # Ensure directories exist
-    ensure_directories()
-    ensure_parent_dirs(resolve_path(args.index))
-    ensure_parent_dirs(resolve_path(args.meta))
-
-    # Load components
-    model = load_model(args.model)
-    index, metas = load_index_and_meta(args.index, args.meta)
-
-    # Early exit if empty
-    if index.ntotal == 0 or not metas:
-        print("⚠️ Index or metadata is empty. Run `build_faiss_index.py` to populate your index.")
-        sys.exit(0)
-
-    # Interactive search loop
-    while True:
-        query = input("\nEnter your search query (or 'q' to quit): ")
-        if query.lower() == 'q':
-            break
-
-        # Encode the query
-        query_vector = model.encode([query])[0].astype('float32')
-
-        # Search the index
-        distances, indices = index.search(query_vector.reshape(1, -1), args.top_k)
-
-        # Print results
-        print("\nSearch results:")
-        for i, (idx, dist) in enumerate(zip(indices[0], distances[0])):
-            if idx < len(metas):
-                result = metas[idx]
-                print(f"\n{i+1}. Score: {1 - dist:.4f}")
-                print(f"Text: {result.get('text', '')[:200]}...")
-                print(f"Source: {result.get('source', 'Unknown')}")
-            else:
-                print(f"\n{i+1}. Invalid index: {idx}")
+def search_index(
+    query: str,
+    index_file: Path,
+    metadata_file: Path,
+    embedding_model: Any,
+    search_config: Optional[SearchConfig] = None,
+    filter_config: Optional[FilterConfig] = None,
+    output_format: OutputFormat = OutputFormat.JSON
+) -> str:
+    """
+    Search FAISS index with the given query.
+    
+    Args:
+        query: Search query
+        index_file: Path to FAISS index
+        metadata_file: Path to metadata file
+        embedding_model: Embedding model instance
+        search_config: Search configuration
+        filter_config: Filter configuration
+        output_format: Output format
+    
+    Returns:
+        Formatted search results
+    """
+    # Load index and metadata
+    logger.info(f"Loading index from {index_file}...")
+    index = faiss.read_index(str(index_file))
+    
+    logger.info(f"Loading metadata from {metadata_file}...")
+    with open(metadata_file, 'r') as f:
+        metadata = json.load(f)
+    
+    # Initialize searcher
+    searcher = FAISSSearcher(index, metadata)
+    if search_config:
+        searcher.set_config(search_config)
+    
+    # Generate query embedding
+    logger.info("Generating query embedding...")
+    query_vector = embedding_model.embed([query])[0].reshape(1, -1)
+    
+    # Search
+    logger.info("Searching index...")
+    distances, indices = searcher.search(query_vector)
+    
+    # Format results
+    results = []
+    for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
+        if idx < 0:  # Invalid index
+            continue
+        
+        chunk = metadata['chunks'][idx]
+        result = {
+            'score': float(distance),
+            'text': chunk['text'],
+            'metadata': {
+                k: v for k, v in chunk.items()
+                if k != 'text'
+            }
+        }
+        results.append(result)
+    
+    # Filter results
+    if filter_config:
+        results = filter_results(results, filter_config)
+    
+    # Format output
+    if output_format == OutputFormat.JSON:
+        return ResultFormatter.format_json(results)
+    elif output_format == OutputFormat.TEXT:
+        return ResultFormatter.format_text(results)
+    elif output_format == OutputFormat.MARKDOWN:
+        return ResultFormatter.format_markdown(results)
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    from sentence_transformers import SentenceTransformer
+    
+    parser = argparse.ArgumentParser(description="Search FAISS index")
+    parser.add_argument("query", type=str, help="Search query")
+    parser.add_argument("--index-file", type=Path, default=MODELS_DIR / "veritas_faiss.index",
+                      help="Path to FAISS index")
+    parser.add_argument("--metadata-file", type=Path, default=MODELS_DIR / "veritas_metadata.pkl",
+                      help="Path to metadata file")
+    parser.add_argument("--embedding-model", type=str, default=DEFAULT_EMBEDDING_MODEL,
+                      help="Name of the embedding model to use")
+    parser.add_argument("--strategy", type=str, choices=[s.value for s in SearchStrategy],
+                      default=SearchStrategy.EXACT.value, help="Search strategy")
+    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K,
+                      help="Number of results to return")
+    parser.add_argument("--output-format", type=str, choices=[f.value for f in OutputFormat],
+                      default=OutputFormat.JSON.value, help="Output format")
+    
+    args = parser.parse_args()
+    
+    # Load embedding model
+    embedding_model = SentenceTransformer(args.embedding_model)
+    
+    # Create configurations
+    search_config = SearchConfig(
+        strategy=SearchStrategy(args.strategy),
+        top_k=args.top_k
+    )
+    
+    # Search and print results
+    results = search_index(
+        args.query,
+        args.index_file,
+        args.metadata_file,
+        embedding_model,
+        search_config,
+        output_format=OutputFormat(args.output_format)
+    )
+    print(results)

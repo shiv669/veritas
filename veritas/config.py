@@ -128,7 +128,7 @@ EMBED_PROMPT = "Represent the scientific passage for retrieval: {}"
 
 # ─── Generation Configuration ──────────────────────────────────────────────────
 # Generation settings
-DEFAULT_GEN_MODEL = "meta-llama/Llama-2-7b-chat-hf"
+DEFAULT_GEN_MODEL = "facebook/opt-350m"  # Small, publicly available model
 MAX_NEW_TOKENS = 300
 TEMPERATURE = 0.7
 
