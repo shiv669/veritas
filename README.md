@@ -1,6 +1,6 @@
 # Veritas: A Scientist for Autonomous Research
 
-**Veritas** is an open-source, modular Large Language Model (LLM) built to revolutionize scientific research.  
+**Veritas** is an open-source, modular Large Language Model (LLM) for scientific research.  
 
 Designed for transparency, adaptability, and epistemic trust, Veritas empowers researchers to access, verify, and synthesize scientific knowledge at scale — with full local control.
 
