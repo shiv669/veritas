@@ -1,9 +1,10 @@
-# Veritas: LLM for Science
+# Veritas: A Scientist for Autonomous Research
 
 **Veritas** is an open-source, modular Large Language Model (LLM) built to revolutionize scientific research.  
+
 Designed for transparency, adaptability, and epistemic trust, Veritas empowers researchers to access, verify, and synthesize scientific knowledge at scale — with full local control.
 
-> Built on the Mistral-2 7B architecture, fine-tuned via QLoRA, and extended with 100K+ token context windows.
+> Built on the Mistral-2 7B architecture, fine-tuned via QLoRA, extended with 100K+ token context windows, and enhanced with a RAG (Retrieval-Augmented Generation) system for citation-backed reasoning.
 
 ---
 
