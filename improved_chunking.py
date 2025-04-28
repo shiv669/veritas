@@ -53,6 +53,7 @@ class ChunkingConfig:
     max_chunk_size: int = 1000  # Maximum chunk size
     respect_sections: bool = True  # Whether to respect document sections
     section_markers: List[str] = None  # Markers for section boundaries
+    max_chunks_per_doc: int = None  # Maximum number of chunks per document
 
 class ImprovedChunker:
     """Enhanced chunker for different chunking strategies."""
@@ -231,7 +232,27 @@ class ImprovedChunker:
         
         elif self.config.strategy == ChunkingStrategy.HIERARCHICAL:
             # Hierarchical chunking for large documents
-            return self._chunk_by_section(text)
+            chunks = self._chunk_by_section(text)
+            
+            # Apply max_chunks_per_doc limit if specified
+            if self.config.max_chunks_per_doc is not None and len(chunks) > self.config.max_chunks_per_doc:
+                logger.warning(f"Document has {len(chunks)} chunks, limiting to {self.config.max_chunks_per_doc}")
+                
+                # If we need to reduce chunks, use a more aggressive chunking approach
+                if len(chunks) > self.config.max_chunks_per_doc * 2:
+                    # For very large documents, use fixed-size chunking with larger chunks
+                    words = text.split()
+                    chunk_size = max(self.config.chunk_size, len(words) // self.config.max_chunks_per_doc)
+                    chunks = []
+                    for i in range(0, len(words), chunk_size - self.config.overlap):
+                        chunk = ' '.join(words[i:i + chunk_size])
+                        if len(chunk.split()) >= self.config.min_chunk_size:
+                            chunks.append(chunk)
+                else:
+                    # For moderately large documents, just take the first max_chunks_per_doc chunks
+                    chunks = chunks[:self.config.max_chunks_per_doc]
+            
+            return chunks
         
         else:
             raise ValueError(f"Unsupported chunking strategy: {self.config.strategy}")
