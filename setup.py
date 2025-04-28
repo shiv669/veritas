@@ -22,5 +22,12 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.8",
-    install_requires=requirements,
+    install_requires=[
+        "numpy",
+        "faiss-cpu",
+        "sentence-transformers",
+        "transformers",
+        "torch",
+        "tqdm"
+    ],
 ) 

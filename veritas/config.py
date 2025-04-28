@@ -139,4 +139,4 @@ MKL_NUM_THREADS = os.getenv("MKL_NUM_THREADS", "1")
 
 # Device settings
 USE_GPU = True  # Set to False to force CPU
-DEVICE = "mps" if USE_GPU and os.environ.get("USE_MPS", "1") == "1" else "cpu" 
+DEVICE = "mps" if USE_GPU and os.environ.get("USE_MPS", "1") == "1" else "cpu"

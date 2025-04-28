@@ -29,11 +29,11 @@ from veritas.utils import ensure_parent_dirs
 class RAGSystem:
     def __init__(
         self,
-        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-        chunk_size: int = DEFAULT_CHUNK_SIZE,
-        faiss_type: str = DEFAULT_FAISS_TYPE,
-        nlist: int = DEFAULT_NLIST,
-        batch_size: int = DEFAULT_BATCH_SIZE
+        embedding_model: str = "all-MiniLM-L6-v2",
+        chunk_size: int = 512,
+        faiss_type: str = "flat",
+        nlist: int = 100,
+        batch_size: int = 32
     ):
         """Initialize the RAG system with specified parameters."""
         self.embedding_model = SentenceTransformer(embedding_model)
@@ -69,7 +69,7 @@ class RAGSystem:
         
         for i in tqdm(range(0, len(texts), self.batch_size)):
             batch = texts[i:i + self.batch_size]
-            batch_embeddings = self.embedding_model.encode(batch)
+            batch_embeddings = self.embedding_model.encode(batch, normalize_embeddings=True)
             embeddings.append(batch_embeddings)
         
         embeddings = np.vstack(embeddings)
@@ -77,10 +77,10 @@ class RAGSystem:
         # Initialize FAISS index
         dimension = embeddings.shape[1]
         if self.faiss_type == "flat":
-            self.index = faiss.IndexFlatL2(dimension)
+            self.index = faiss.IndexFlatIP(dimension)  # Use Inner Product for normalized vectors
         elif self.faiss_type == "ivf":
-            quantizer = faiss.IndexFlatL2(dimension)
-            self.index = faiss.IndexIVFFlat(quantizer, dimension, self.nlist)
+            quantizer = faiss.IndexFlatIP(dimension)
+            self.index = faiss.IndexIVFFlat(quantizer, dimension, self.nlist, faiss.METRIC_INNER_PRODUCT)
             self.index.train(embeddings)
         
         # Add vectors to index
@@ -103,24 +103,39 @@ class RAGSystem:
         with open(METADATA_FILE, 'r') as f:
             self.metadata = json.load(f)
     
-    def retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, k: int = 5, min_score: float = 0.5) -> List[Dict[str, Any]]:
         """Retrieve most relevant chunks for a query."""
         if self.index is None:
             raise ValueError("Index not built or loaded")
         
         # Generate query embedding
-        query_embedding = self.embedding_model.encode([query])
+        query_embedding = self.embedding_model.encode([query], normalize_embeddings=True)
         
         # Search in index
-        distances, indices = self.index.search(query_embedding, k)
+        scores, indices = self.index.search(query_embedding, k * 2)  # Get more results to filter
         
-        # Return relevant chunks with metadata
+        # Filter and deduplicate results
+        seen_texts = set()
         results = []
-        for idx, distance in zip(indices[0], distances[0]):
+        
+        for idx, score in zip(indices[0], scores[0]):
             if idx < len(self.metadata):  # Ensure index is valid
                 chunk = self.metadata[idx].copy()
-                chunk["score"] = float(distance)
+                
+                # Convert distance to similarity score (for inner product, higher is better)
+                score = float(score)
+                
+                # Skip if score is too low or text is duplicate
+                if score < min_score or chunk["text"] in seen_texts:
+                    continue
+                
+                chunk["score"] = score
                 results.append(chunk)
+                seen_texts.add(chunk["text"])
+                
+                # Break if we have enough results
+                if len(results) >= k:
+                    break
         
         return results
     

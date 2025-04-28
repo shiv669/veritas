@@ -6,47 +6,38 @@ Script to build and test the RAG system.
 import json
 from pathlib import Path
 from veritas.rag import RAGSystem
-from veritas.config import INPUT_DATA_FILE, RAG_CHUNKS_FILE
-from veritas.utils import ensure_parent_dirs
 
 def main():
+    # Load processed documents
+    with open("data/processed_1.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+        documents = [doc["content"] for doc in data["documents"]]
+    
     # Initialize RAG system
     rag = RAGSystem()
     
-    # Load input documents
-    with open(INPUT_DATA_FILE, 'r') as f:
-        data = json.load(f)
-    
     # Process documents into chunks
     print("Processing documents into chunks...")
-    chunks = rag.process_documents([item["text"] for item in data])
+    chunks = rag.process_documents(documents)
     
-    # Save chunks for reference
-    ensure_parent_dirs(RAG_CHUNKS_FILE)
-    with open(RAG_CHUNKS_FILE, 'w') as f:
-        json.dump(chunks, f)
-    
-    # Build index
+    # Build FAISS index
     print("Building FAISS index...")
     rag.build_index(chunks)
     
-    # Test retrieval and generation
+    # Test queries
     test_queries = [
-        "What is the main topic of the documents?",
+        "What is the main topic of the document?",
         "Can you summarize the key points?",
+        "What are the conclusions?"
     ]
     
-    print("\nTesting RAG system with sample queries:")
+    print("\nTesting retrieval:")
     for query in test_queries:
         print(f"\nQuery: {query}")
-        
-        # Retrieve relevant chunks
-        retrieved_chunks = rag.retrieve(query)
-        print(f"Retrieved {len(retrieved_chunks)} relevant chunks")
-        
-        # Generate response
-        response = rag.generate_response(query, retrieved_chunks)
-        print(f"Generated response: {response}")
+        results = rag.retrieve(query, k=3)
+        for i, result in enumerate(results, 1):
+            print(f"\nResult {i} (Score: {result['score']:.4f}):")
+            print(result["text"])
 
 if __name__ == "__main__":
     main() 

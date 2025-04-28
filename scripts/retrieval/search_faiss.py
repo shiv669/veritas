@@ -254,16 +254,16 @@ if __name__ == "__main__":
                       default=OutputFormat.JSON.value, help="Output format")
     
     args = parser.parse_args()
-    
+
     # Load embedding model
     embedding_model = SentenceTransformer(args.embedding_model)
-    
+
     # Create configurations
     search_config = SearchConfig(
         strategy=SearchStrategy(args.strategy),
         top_k=args.top_k
     )
-    
+
     # Search and print results
     results = search_index(
         args.query,

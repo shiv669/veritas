@@ -64,14 +64,14 @@ def create_stub_index(index_file: str, meta_file: str, model_name: str) -> None:
     sample_embedding = model.encode(sample_text, normalize_embeddings=True)
     embedding_dim = sample_embedding.shape[0]
     print(f"Embedding dimension: {embedding_dim}")
-    
+
     # Create empty FAISS index
     index = faiss.IndexFlatL2(embedding_dim)
-    
+
     # Save index
     faiss.write_index(index, index_file)
     print(f"Created empty FAISS index at {index_file}")
-    
+
     # Create empty metadata
     metadata = []
     with open(meta_file, "wb") as f:
