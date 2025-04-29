@@ -37,12 +37,8 @@ def process_command(args):
 
 def chunk_command(args):
     """Process the 'chunk' command to create text chunks."""
-    if args.strategy == 'basic':
-        from scripts.chunk_data import process_json_file
-        process_json_file(args.input_file, args.output_dir, args.chunk_size, args.overlap)
-    elif args.strategy == 'improved':
-        from scripts.improved_chunking import create_improved_chunks
-        create_improved_chunks(args.input_file, args.output_dir, args.chunk_size, args.overlap)
+    from scripts.chunk_data import process_json_file
+    process_json_file(args.input_file, args.output_dir, args.chunk_size, args.overlap)
 
 def index_command(args):
     """Process the 'index' command to index chunks."""
