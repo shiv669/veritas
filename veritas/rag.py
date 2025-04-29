@@ -13,6 +13,7 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from tqdm import tqdm
+import pickle
 
 from veritas.config import (
     DEFAULT_CHUNK_SIZE,
@@ -91,8 +92,8 @@ class RAGSystem:
         ensure_parent_dirs(FAISS_INDEX_FILE)
         ensure_parent_dirs(METADATA_FILE)
         faiss.write_index(self.index, str(FAISS_INDEX_FILE))
-        with open(METADATA_FILE, 'w') as f:
-            json.dump(self.metadata, f)
+        with open(METADATA_FILE, 'wb') as f:
+            pickle.dump(self.metadata, f)
     
     def load_index(self) -> None:
         """Load existing FAISS index and metadata."""
@@ -100,11 +101,20 @@ class RAGSystem:
             raise FileNotFoundError("Index or metadata file not found")
         
         self.index = faiss.read_index(str(FAISS_INDEX_FILE))
-        with open(METADATA_FILE, 'r') as f:
-            self.metadata = json.load(f)
+        with open(METADATA_FILE, 'rb') as f:
+            self.metadata = pickle.load(f)
     
-    def retrieve(self, query: str, k: int = 5, min_score: float = 0.5) -> List[Dict[str, Any]]:
-        """Retrieve most relevant chunks for a query."""
+    def retrieve(self, query: str, k: int = 5, min_score: float = 0.3) -> List[Dict[str, Any]]:
+        """Retrieve most relevant chunks for a query.
+        
+        Args:
+            query: The query string to search for
+            k: Number of results to return
+            min_score: Minimum similarity score threshold (0 to 1)
+            
+        Returns:
+            List of dictionaries containing the retrieved chunks and their metadata
+        """
         if self.index is None:
             raise ValueError("Index not built or loaded")
         
@@ -115,7 +125,7 @@ class RAGSystem:
         scores, indices = self.index.search(query_embedding, k * 2)  # Get more results to filter
         
         # Filter and deduplicate results
-        seen_texts = set()
+        seen_contents = set()
         results = []
         
         for idx, score in zip(indices[0], scores[0]):
@@ -125,13 +135,16 @@ class RAGSystem:
                 # Convert distance to similarity score (for inner product, higher is better)
                 score = float(score)
                 
-                # Skip if score is too low or text is duplicate
-                if score < min_score or chunk["text"] in seen_texts:
+                # Get the content to check for duplicates
+                content = str(chunk.get('content', chunk.get('text', '')))
+                
+                # Skip if score is too low or content is duplicate
+                if score < min_score or content in seen_contents:
                     continue
                 
                 chunk["score"] = score
                 results.append(chunk)
-                seen_texts.add(chunk["text"])
+                seen_contents.add(content)
                 
                 # Break if we have enough results
                 if len(results) >= k:

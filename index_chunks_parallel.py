@@ -201,15 +201,28 @@ def chunk_generator():
             for prefix, event, value in parser:
                 if prefix.endswith('.text'):
                     if current_chunk is not None:
+                        # Validate metadata before yielding
+                        if 'metadata' not in current_chunk:
+                            logger.warning(f"Missing metadata for chunk with text: {current_chunk['text'][:100]}...")
+                            current_chunk['metadata'] = {'source': 'unknown', 'chunk_index': 0}
                         yield current_chunk
                     current_chunk = {"text": value}
                 elif prefix.endswith('.metadata'):
                     if current_chunk is not None:
+                        # Validate metadata structure
+                        if not isinstance(value, dict):
+                            logger.warning(f"Invalid metadata type: {type(value)}. Expected dict.")
+                            value = {'source': 'unknown', 'chunk_index': 0}
                         current_chunk["metadata"] = value
         if current_chunk is not None:
+            # Validate final chunk
+            if 'metadata' not in current_chunk:
+                logger.warning(f"Missing metadata for final chunk with text: {current_chunk['text'][:100]}...")
+                current_chunk['metadata'] = {'source': 'unknown', 'chunk_index': 0}
             yield current_chunk
     except Exception as e:
         logger.error(f"Error in chunk generator: {str(e)}")
+        logger.error(traceback.format_exc())
         return
 
 def chunks_generator(batch_size: int = 1000):
@@ -231,6 +244,10 @@ def chunks_generator(batch_size: int = 1000):
             for prefix, event, value in parser:
                 if prefix.endswith('.text'):
                     if current_chunk is not None:
+                        # Validate metadata before adding to batch
+                        if 'metadata' not in current_chunk:
+                            logger.warning(f"Missing metadata for chunk with text: {current_chunk['text'][:100]}...")
+                            current_chunk['metadata'] = {'source': 'unknown', 'chunk_index': 0}
                         current_batch.append(current_chunk)
                         if len(current_batch) >= batch_size:
                             yield current_batch
@@ -239,10 +256,18 @@ def chunks_generator(batch_size: int = 1000):
                     current_chunk = {"text": value}
                 elif prefix.endswith('.metadata'):
                     if current_chunk is not None:
+                        # Validate metadata structure
+                        if not isinstance(value, dict):
+                            logger.warning(f"Invalid metadata type: {type(value)}. Expected dict.")
+                            value = {'source': 'unknown', 'chunk_index': 0}
                         current_chunk["metadata"] = value
             
             # Add the last chunk if it exists
             if current_chunk is not None:
+                # Validate final chunk metadata
+                if 'metadata' not in current_chunk:
+                    logger.warning(f"Missing metadata for final chunk with text: {current_chunk['text'][:100]}...")
+                    current_chunk['metadata'] = {'source': 'unknown', 'chunk_index': 0}
                 current_batch.append(current_chunk)
                 
             # Yield the remaining chunks
@@ -268,11 +293,24 @@ def process_group(group_id: int, texts: List[str], metadata: List[Dict], model_n
         
     Raises:
         RuntimeError: If processing fails
+        ValueError: If texts and metadata don't match or are invalid
     """
     if len(texts) != len(metadata):
-        logging.error(f"Group {group_id}: Mismatch between texts ({len(texts)}) and metadata ({len(metadata)})")
-        raise ValueError("Texts and metadata length mismatch")
+        error_msg = f"Group {group_id}: Mismatch between texts ({len(texts)}) and metadata ({len(metadata)})"
+        logging.error(error_msg)
+        raise ValueError(error_msg)
         
+    # Validate metadata structure and content
+    valid_metadata = []
+    for i, meta in enumerate(metadata):
+        if not isinstance(meta, dict):
+            logging.warning(f"Group {group_id}: Invalid metadata at index {i}: expected dict, got {type(meta)}")
+            meta = {'source': 'unknown', 'chunk_index': i}
+        elif not meta:  # Empty dict
+            logging.warning(f"Group {group_id}: Empty metadata at index {i}")
+            meta = {'source': 'unknown', 'chunk_index': i}
+        valid_metadata.append(meta)
+    
     try:
         logging.info(f"Group {group_id}: Loading model {model_name}")
         
@@ -307,12 +345,22 @@ def process_group(group_id: int, texts: List[str], metadata: List[Dict], model_n
         gc.collect()
         
         # Filter metadata to match valid texts
-        filtered_metadata = [metadata[i] for i in valid_indices]
+        filtered_metadata = []
+        for i in valid_indices:
+            meta = valid_metadata[i]
+            # Ensure metadata has required fields
+            if 'source' not in meta:
+                meta['source'] = 'unknown'
+            if 'chunk_index' not in meta:
+                meta['chunk_index'] = i
+            filtered_metadata.append(meta)
         
         if len(embeddings) != len(filtered_metadata):
-            raise RuntimeError(f"Group {group_id}: Mismatch between embeddings ({len(embeddings)}) and metadata ({len(filtered_metadata)})")
+            error_msg = f"Group {group_id}: Mismatch between embeddings ({len(embeddings)}) and metadata ({len(filtered_metadata)})"
+            logging.error(error_msg)
+            raise RuntimeError(error_msg)
             
-        logging.info(f"Group {group_id}: Successfully processed {len(embeddings)} texts")
+        logging.info(f"Group {group_id}: Successfully processed {len(embeddings)} texts with metadata")
         return embeddings, filtered_metadata
         
     except Exception as e:
@@ -350,7 +398,21 @@ def main():
         logger.info("Processing chunks...")
         with mp.Pool(NUM_WORKERS) as pool:
             for chunk_batch in chunks_generator(batch_size=GROUP_SIZE):
-                current_group.extend(chunk_batch)
+                # Validate chunk structure before processing
+                valid_chunks = []
+                for chunk in chunk_batch:
+                    if not isinstance(chunk, dict):
+                        logger.warning(f"Invalid chunk type: {type(chunk)}. Expected dict.")
+                        continue
+                    if 'text' not in chunk:
+                        logger.warning("Chunk missing 'text' field")
+                        continue
+                    if 'metadata' not in chunk:
+                        logger.warning(f"Chunk missing 'metadata' field for text: {chunk['text'][:100]}...")
+                        chunk['metadata'] = {'source': 'unknown', 'chunk_index': len(valid_chunks)}
+                    valid_chunks.append(chunk)
+                
+                current_group.extend(valid_chunks)
                 
                 if len(current_group) >= GROUP_SIZE:
                     group_count += 1
@@ -358,9 +420,10 @@ def main():
                     logger.info(f"Memory usage before group: {get_memory_usage():.2f} GB")
                     
                     # Process the group
-                    result = process_group(group_count, [chunk.get('text', '') for chunk in current_group], 
-                                         [chunk.get('metadata', {}) for chunk in current_group], 
-                                         DEFAULT_EMBEDDING_MODEL)
+                    result = process_group(group_count, 
+                                        [chunk['text'] for chunk in current_group], 
+                                        [chunk['metadata'] for chunk in current_group], 
+                                        DEFAULT_EMBEDDING_MODEL)
                     
                     if result[0].size > 0:
                         # Save embeddings and metadata
@@ -372,8 +435,10 @@ def main():
                             metadata_file = TEMP_DIR / f"metadata_group_{group_count}.json"
                             with open(metadata_file, 'w') as f:
                                 json.dump(result[1], f)
+                            logger.info(f"Saved metadata for group {group_count} with {len(result[1])} entries")
                         except Exception as e:
                             logger.error(f"Error saving group {group_count}: {e}")
+                            logger.error(traceback.format_exc())
                     
                     current_group = []
                     clear_memory()
@@ -384,9 +449,25 @@ def main():
             group_count += 1
             logger.info(f"Processing final group {group_count}")
             
-            result = process_group(group_count, [chunk.get('text', '') for chunk in current_group], 
-                                 [chunk.get('metadata', {}) for chunk in current_group], 
-                                 DEFAULT_EMBEDDING_MODEL)
+            # Validate remaining chunks
+            valid_chunks = []
+            for chunk in current_group:
+                if not isinstance(chunk, dict):
+                    logger.warning(f"Invalid chunk type: {type(chunk)}. Expected dict.")
+                    continue
+                if 'text' not in chunk:
+                    logger.warning("Chunk missing 'text' field")
+                    continue
+                if 'metadata' not in chunk:
+                    logger.warning(f"Chunk missing 'metadata' field for text: {chunk['text'][:100]}...")
+                    chunk['metadata'] = {'source': 'unknown', 'chunk_index': len(valid_chunks)}
+                valid_chunks.append(chunk)
+            
+            result = process_group(group_count, 
+                                [chunk['text'] for chunk in valid_chunks], 
+                                [chunk['metadata'] for chunk in valid_chunks], 
+                                DEFAULT_EMBEDDING_MODEL)
+            
             if result[0].size > 0:
                 temp_file = TEMP_DIR / f"embeddings_group_{group_count}.npy"
                 if save_embeddings(result[0], temp_file):
@@ -395,6 +476,7 @@ def main():
                     metadata_file = TEMP_DIR / f"metadata_group_{group_count}.json"
                     with open(metadata_file, 'w') as f:
                         json.dump(result[1], f)
+                    logger.info(f"Saved metadata for final group with {len(result[1])} entries")
         
         if not temp_files:
             logger.error("No embeddings were successfully generated")
@@ -435,9 +517,15 @@ def main():
         all_chunks = []
         try:
             with open(TEMP_DIR / "metadata_group_1.json") as f:
-                all_chunks.extend(json.load(f))
+                metadata = json.load(f)
+                if not isinstance(metadata, list):
+                    logger.error("Invalid metadata format in first group")
+                    return
+                all_chunks.extend(metadata)
+                logger.info(f"Loaded {len(metadata)} metadata entries from first group")
         except Exception as e:
             logger.error(f"Error loading first group metadata: {str(e)}")
+            logger.error(traceback.format_exc())
             return
             
         for i, temp_file in enumerate(temp_files[1:], 1):
@@ -453,9 +541,14 @@ def main():
                     
                 with open(TEMP_DIR / f"metadata_group_{i+1}.json") as f:
                     group_chunks = json.load(f)
+                    if not isinstance(group_chunks, list):
+                        logger.error(f"Invalid metadata format in group {i+1}")
+                        continue
                     all_chunks.extend(group_chunks)
+                    logger.info(f"Loaded {len(group_chunks)} metadata entries from group {i+1}")
             except Exception as e:
                 logger.error(f"Error processing group {i+1}: {str(e)}")
+                logger.error(traceback.format_exc())
                 continue
                 
             del embeddings
@@ -467,8 +560,10 @@ def main():
             faiss.write_index(index, str(FAISS_INDEX_FILE))
             with open(METADATA_FILE, 'w') as f:
                 json.dump(all_chunks, f)
+            logger.info(f"Successfully saved index and {len(all_chunks)} metadata entries")
         except Exception as e:
             logger.error(f"Error saving final files: {str(e)}")
+            logger.error(traceback.format_exc())
             return
             
         logger.info("Cleaning up temporary files")
