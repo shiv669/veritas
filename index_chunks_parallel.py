@@ -26,6 +26,9 @@ import ijson
 import multiprocessing as mp
 from typing import List, Dict, Any, Optional, Tuple
 import platform
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait
 
 from veritas.rag import RAGSystem
 from veritas.config import (
@@ -59,6 +62,19 @@ OPTIMIZED_BATCH_SIZE = 64
 GROUP_SIZE = 100
 # Memory threshold (90% of available RAM)
 MEMORY_THRESHOLD = 0.9 * (120 * 1024 * 1024 * 1024)  # 90% of 120GB in bytes
+
+# Metadata constants
+REQUIRED_METADATA_FIELDS = {'source', 'chunk_index'}
+OPTIONAL_METADATA_FIELDS = {
+    'document_id',
+    'timestamp',
+    'title',
+    'author',
+    'page_number',
+    'section',
+    'language',
+    'confidence_score'
+}
 
 def get_memory_usage():
     """Get current memory usage in GB."""
@@ -368,215 +384,325 @@ def process_group(group_id: int, texts: List[str], metadata: List[Dict], model_n
         logging.error(traceback.format_exc())
         raise RuntimeError(f"Failed to process group {group_id}: {str(e)}")
 
+def validate_metadata(metadata: Dict[str, Any], chunk_index: int) -> Dict[str, Any]:
+    """Validate and enrich metadata with default values for missing fields.
+    
+    Args:
+        metadata: Original metadata dictionary
+        chunk_index: Index of the chunk in the document
+        
+    Returns:
+        Enriched metadata dictionary with all required and optional fields
+    """
+    if not isinstance(metadata, dict):
+        metadata = {}
+        
+    # Ensure required fields
+    enriched = {
+        'source': metadata.get('source', 'unknown'),
+        'chunk_index': chunk_index,
+        'timestamp': metadata.get('timestamp', datetime.now().isoformat()),
+        'document_id': metadata.get('document_id', f"doc_{chunk_index}"),
+        'title': metadata.get('title', ''),
+        'author': metadata.get('author', ''),
+        'page_number': metadata.get('page_number', 0),
+        'section': metadata.get('section', ''),
+        'language': metadata.get('language', 'en'),
+        'confidence_score': metadata.get('confidence_score', 1.0)
+    }
+    
+    # Validate field types
+    if not isinstance(enriched['source'], str):
+        enriched['source'] = str(enriched['source'])
+    if not isinstance(enriched['chunk_index'], int):
+        enriched['chunk_index'] = int(enriched['chunk_index'])
+    if not isinstance(enriched['document_id'], str):
+        enriched['document_id'] = str(enriched['document_id'])
+    if not isinstance(enriched['title'], str):
+        enriched['title'] = str(enriched['title'])
+    if not isinstance(enriched['author'], str):
+        enriched['author'] = str(enriched['author'])
+    if not isinstance(enriched['page_number'], (int, float)):
+        enriched['page_number'] = 0
+    if not isinstance(enriched['section'], str):
+        enriched['section'] = str(enriched['section'])
+    if not isinstance(enriched['language'], str):
+        enriched['language'] = 'en'
+    if not isinstance(enriched['confidence_score'], (int, float)):
+        enriched['confidence_score'] = 1.0
+        
+    return enriched
+
+def get_metadata_stats(processed_chunks):
+    """Generate statistics about the processed chunks' metadata.
+    
+    Args:
+        processed_chunks (list): List of processed chunk dictionaries
+        
+    Returns:
+        dict: Statistics about the metadata fields
+    """
+    stats = {
+        'total_chunks': len(processed_chunks),
+        'field_counts': {},
+        'field_values': {},
+        'missing_fields': {},
+        'validation_errors': {}
+    }
+    
+    for chunk in processed_chunks:
+        metadata = chunk.get('metadata', {})
+        
+        # Count occurrences of each field
+        for field in metadata:
+            stats['field_counts'][field] = stats['field_counts'].get(field, 0) + 1
+            
+            # Track unique values for each field
+            if field not in stats['field_values']:
+                stats['field_values'][field] = set()
+            stats['field_values'][field].add(str(metadata[field]))
+            
+        # Track missing required fields
+        required_fields = {'source', 'chunk_index', 'timestamp'}
+        missing = required_fields - set(metadata.keys())
+        for field in missing:
+            stats['missing_fields'][field] = stats['missing_fields'].get(field, 0) + 1
+            
+        # Track validation errors
+        if 'validation_errors' in chunk:
+            for error in chunk['validation_errors']:
+                error_type = error.get('type', 'unknown')
+                stats['validation_errors'][error_type] = stats['validation_errors'].get(error_type, 0) + 1
+                
+    # Convert sets to lists for JSON serialization
+    for field in stats['field_values']:
+        stats['field_values'][field] = list(stats['field_values'][field])
+        
+    return stats
+
+def backup_metadata(metadata_list: List[Dict[str, Any]], backup_path: Path) -> bool:
+    """Create a backup of metadata with timestamp.
+    
+    Args:
+        metadata_list: List of metadata dictionaries
+        backup_path: Path to save the backup
+        
+    Returns:
+        True if backup was successful, False otherwise
+    """
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = backup_path / f"metadata_backup_{timestamp}.json"
+        
+        with open(backup_file, 'w') as f:
+            json.dump({
+                'timestamp': timestamp,
+                'metadata': metadata_list,
+                'stats': get_metadata_stats(metadata_list)
+            }, f, indent=2)
+            
+        logger.info(f"Created metadata backup at {backup_file}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to create metadata backup: {str(e)}")
+        logger.error(traceback.format_exc())
+        return False
+
+def restore_metadata(backup_path: Path) -> Optional[List[Dict[str, Any]]]:
+    """Restore metadata from the most recent backup.
+    
+    Args:
+        backup_path: Path containing metadata backups
+        
+    Returns:
+        List of metadata dictionaries if successful, None otherwise
+    """
+    try:
+        # Find most recent backup
+        backup_files = list(backup_path.glob("metadata_backup_*.json"))
+        if not backup_files:
+            logger.error("No metadata backups found")
+            return None
+            
+        latest_backup = max(backup_files, key=lambda x: x.stat().st_mtime)
+        
+        with open(latest_backup) as f:
+            backup_data = json.load(f)
+            
+        logger.info(f"Restored metadata from backup {latest_backup}")
+        return backup_data['metadata']
+        
+    except Exception as e:
+        logger.error(f"Failed to restore metadata: {str(e)}")
+        logger.error(traceback.format_exc())
+        return None
+
+def process_chunk_group(group_id: int, chunks: List[Dict[str, Any]], rag: RAGSystem, 
+                       output_dir: Path, backup_dir: Path) -> Tuple[int, int]:
+    """Process a group of chunks in parallel.
+    
+    Args:
+        group_id: ID of the group being processed
+        chunks: List of chunk dictionaries
+        rag: RAGSystem instance
+        output_dir: Directory to save output files
+        backup_dir: Directory to save metadata backups
+        
+    Returns:
+        Tuple of (successful_chunks, failed_chunks)
+    """
+    try:
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Process chunks in parallel
+        with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+            # Submit all tasks
+            futures = {
+                executor.submit(process_chunk, chunk, rag, output_dir): chunk
+                for chunk in chunks
+            }
+            
+            # Collect results
+            successful = 0
+            failed = 0
+            processed_chunks = []
+            
+            # Wait for all futures to complete
+            done, _ = wait(futures.keys())
+            
+            # Process results
+            for future in done:
+                try:
+                    result = future.result()
+                    if result:
+                        successful += 1
+                        processed_chunks.append(result)
+                    else:
+                        failed += 1
+                except Exception as e:
+                    logger.error(f"Error processing chunk: {str(e)}")
+                    failed += 1
+            
+            # Backup metadata after successful processing
+            if processed_chunks:
+                backup_metadata(processed_chunks, backup_dir)
+                
+            return successful, failed
+            
+    except Exception as e:
+        logger.error(f"Failed to process group {group_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        return 0, len(chunks)
+
+def process_chunk(chunk: Dict[str, Any], rag: RAGSystem, output_dir: Path) -> Optional[Dict[str, Any]]:
+    """Process a single chunk.
+    
+    Args:
+        chunk: Chunk dictionary containing text and metadata
+        rag: RAGSystem instance
+        output_dir: Directory to save output files
+        
+    Returns:
+        Processed chunk metadata if successful, None otherwise
+    """
+    try:
+        # Extract text and metadata
+        text = chunk.get('text', '')
+        metadata = chunk.get('metadata', {})
+        chunk_index = metadata.get('chunk_index', 0)
+        
+        if not text:
+            logger.warning("Empty chunk text, skipping")
+            return None
+            
+        # Validate and enrich metadata
+        enriched_metadata = validate_metadata(metadata, chunk_index)
+        
+        # Add chunk to RAG system
+        rag.add_text(text, enriched_metadata)
+        
+        # Save processed chunk info
+        chunk_info = {
+            'text': text[:100] + '...' if len(text) > 100 else text,  # Truncate for logging
+            'metadata': enriched_metadata,
+            'processed_at': datetime.now().isoformat()
+        }
+        
+        # Save to output file
+        output_file = output_dir / f"chunk_{chunk_index}.json"
+        with open(output_file, 'w') as f:
+            json.dump(chunk_info, f, indent=2)
+            
+        return enriched_metadata
+        
+    except Exception as e:
+        logger.error(f"Error processing chunk: {str(e)}")
+        logger.error(traceback.format_exc())
+        return None
+
 def main():
     """Main function to index chunks into the RAG system."""
     try:
-        # Check if chunks file exists
-        if not CHUNKS_FILE.exists():
-            logger.error(f"Chunks file not found: {CHUNKS_FILE}")
-            return
+        # Initialize RAG system
+        rag = RAGSystem()
         
-        # Create temp directory
-        TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        # Create output and backup directories
+        output_dir = Path("output/chunks")
+        backup_dir = Path("output/metadata_backups")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        backup_dir.mkdir(parents=True, exist_ok=True)
         
-        # Count total chunks
-        logger.info("Counting chunks...")
-        total_chunks = count_chunks()
-        if total_chunks == 0:
-            logger.error("No chunks found or error counting chunks")
+        # Load chunks from input file
+        input_file = Path("input/chunks.json")
+        if not input_file.exists():
+            logger.error(f"Input file not found: {input_file}")
             return
             
-        logger.info(f"Found {total_chunks} chunks")
-        logger.info(f"Initial memory usage: {get_memory_usage():.2f} GB")
-        logger.info(f"Using {NUM_WORKERS} workers on {NUM_CORES} cores")
+        with open(input_file) as f:
+            chunks = json.load(f)
+            
+        if not chunks:
+            logger.error("No chunks found in input file")
+            return
+            
+        # Group chunks for parallel processing
+        chunk_groups = [chunks[i:i + GROUP_SIZE] for i in range(0, len(chunks), GROUP_SIZE)]
         
-        # Process chunks in groups
-        temp_files = []
-        current_group = []
-        group_count = 0
+        # Process groups in parallel
+        total_successful = 0
+        total_failed = 0
+        all_processed_chunks = []
         
-        logger.info("Processing chunks...")
-        with mp.Pool(NUM_WORKERS) as pool:
-            for chunk_batch in chunks_generator(batch_size=GROUP_SIZE):
-                # Validate chunk structure before processing
-                valid_chunks = []
-                for chunk in chunk_batch:
-                    if not isinstance(chunk, dict):
-                        logger.warning(f"Invalid chunk type: {type(chunk)}. Expected dict.")
-                        continue
-                    if 'text' not in chunk:
-                        logger.warning("Chunk missing 'text' field")
-                        continue
-                    if 'metadata' not in chunk:
-                        logger.warning(f"Chunk missing 'metadata' field for text: {chunk['text'][:100]}...")
-                        chunk['metadata'] = {'source': 'unknown', 'chunk_index': len(valid_chunks)}
-                    valid_chunks.append(chunk)
+        with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+            futures = []
+            for group_id, group in enumerate(chunk_groups):
+                future = executor.submit(process_chunk_group, group_id, group, rag, output_dir, backup_dir)
+                futures.append(future)
                 
-                current_group.extend(valid_chunks)
+            for future in futures:
+                successful, failed = future.result()
+                total_successful += successful
+                total_failed += failed
                 
-                if len(current_group) >= GROUP_SIZE:
-                    group_count += 1
-                    logger.info(f"Processing group {group_count}")
-                    logger.info(f"Memory usage before group: {get_memory_usage():.2f} GB")
-                    
-                    # Process the group
-                    result = process_group(group_count, 
-                                        [chunk['text'] for chunk in current_group], 
-                                        [chunk['metadata'] for chunk in current_group], 
-                                        DEFAULT_EMBEDDING_MODEL)
-                    
-                    if result[0].size > 0:
-                        # Save embeddings and metadata
-                        try:
-                            temp_file = TEMP_DIR / f"embeddings_group_{group_count}.npy"
-                            if save_embeddings(result[0], temp_file):
-                                temp_files.append(temp_file)
-                                
-                            metadata_file = TEMP_DIR / f"metadata_group_{group_count}.json"
-                            with open(metadata_file, 'w') as f:
-                                json.dump(result[1], f)
-                            logger.info(f"Saved metadata for group {group_count} with {len(result[1])} entries")
-                        except Exception as e:
-                            logger.error(f"Error saving group {group_count}: {e}")
-                            logger.error(traceback.format_exc())
-                    
-                    current_group = []
-                    clear_memory()
-                    logger.info(f"Memory usage after group: {get_memory_usage():.2f} GB")
-        
-        # Process remaining chunks if any
-        if current_group:
-            group_count += 1
-            logger.info(f"Processing final group {group_count}")
+        # Generate and save metadata statistics
+        stats = get_metadata_stats(all_processed_chunks)
+        stats_file = output_dir / "metadata_stats.json"
+        with open(stats_file, 'w') as f:
+            json.dump(stats, f, indent=2)
             
-            # Validate remaining chunks
-            valid_chunks = []
-            for chunk in current_group:
-                if not isinstance(chunk, dict):
-                    logger.warning(f"Invalid chunk type: {type(chunk)}. Expected dict.")
-                    continue
-                if 'text' not in chunk:
-                    logger.warning("Chunk missing 'text' field")
-                    continue
-                if 'metadata' not in chunk:
-                    logger.warning(f"Chunk missing 'metadata' field for text: {chunk['text'][:100]}...")
-                    chunk['metadata'] = {'source': 'unknown', 'chunk_index': len(valid_chunks)}
-                valid_chunks.append(chunk)
-            
-            result = process_group(group_count, 
-                                [chunk['text'] for chunk in valid_chunks], 
-                                [chunk['metadata'] for chunk in valid_chunks], 
-                                DEFAULT_EMBEDDING_MODEL)
-            
-            if result[0].size > 0:
-                temp_file = TEMP_DIR / f"embeddings_group_{group_count}.npy"
-                if save_embeddings(result[0], temp_file):
-                    temp_files.append(temp_file)
-                    
-                    metadata_file = TEMP_DIR / f"metadata_group_{group_count}.json"
-                    with open(metadata_file, 'w') as f:
-                        json.dump(result[1], f)
-                    logger.info(f"Saved metadata for final group with {len(result[1])} entries")
-        
-        if not temp_files:
-            logger.error("No embeddings were successfully generated")
-            return
-            
-        # Initialize FAISS index using first group
-        logger.info("Loading first group to get dimensions")
-        first_embeddings = load_embeddings(temp_files[0])
-        if first_embeddings is None:
-            logger.error("Could not load first group embeddings")
-            return
-            
-        dimension = first_embeddings.shape[1]
-        
-        logger.info(f"Creating FAISS index with dimension {dimension}")
-        if DEFAULT_FAISS_TYPE == "flat":
-            index = faiss.IndexFlatIP(dimension)
-        elif DEFAULT_FAISS_TYPE == "ivf":
-            quantizer = faiss.IndexFlatIP(dimension)
-            train_nlist = min(DEFAULT_NLIST, total_chunks // 10)
-            index = faiss.IndexIVFFlat(quantizer, dimension, train_nlist, faiss.METRIC_INNER_PRODUCT)
-            
-            # Train on first group
-            logger.info("Training IVF index on first group")
-            index.train(first_embeddings)
-        
-        # Add first group to index
-        logger.info("Adding first group to index")
-        for i in range(0, len(first_embeddings), OPTIMIZED_BATCH_SIZE):
-            chunk = first_embeddings[i:i + OPTIMIZED_BATCH_SIZE]
-            index.add(chunk)
-        
-        # Clear memory
-        del first_embeddings
-        clear_memory()
-        
-        # Add remaining groups to index
-        all_chunks = []
-        try:
-            with open(TEMP_DIR / "metadata_group_1.json") as f:
-                metadata = json.load(f)
-                if not isinstance(metadata, list):
-                    logger.error("Invalid metadata format in first group")
-                    return
-                all_chunks.extend(metadata)
-                logger.info(f"Loaded {len(metadata)} metadata entries from first group")
-        except Exception as e:
-            logger.error(f"Error loading first group metadata: {str(e)}")
-            logger.error(traceback.format_exc())
-            return
-            
-        for i, temp_file in enumerate(temp_files[1:], 1):
-            logger.info(f"Processing saved group {i+1}/{len(temp_files)}")
-            embeddings = load_embeddings(temp_file)
-            if embeddings is None:
-                continue
-                
-            try:
-                for j in range(0, len(embeddings), OPTIMIZED_BATCH_SIZE):
-                    chunk = embeddings[j:j + OPTIMIZED_BATCH_SIZE]
-                    index.add(chunk)
-                    
-                with open(TEMP_DIR / f"metadata_group_{i+1}.json") as f:
-                    group_chunks = json.load(f)
-                    if not isinstance(group_chunks, list):
-                        logger.error(f"Invalid metadata format in group {i+1}")
-                        continue
-                    all_chunks.extend(group_chunks)
-                    logger.info(f"Loaded {len(group_chunks)} metadata entries from group {i+1}")
-            except Exception as e:
-                logger.error(f"Error processing group {i+1}: {str(e)}")
-                logger.error(traceback.format_exc())
-                continue
-                
-            del embeddings
-            clear_memory()
-        
-        # Save the final index and metadata
-        logger.info("Saving index and metadata")
-        try:
-            faiss.write_index(index, str(FAISS_INDEX_FILE))
-            with open(METADATA_FILE, 'w') as f:
-                json.dump(all_chunks, f)
-            logger.info(f"Successfully saved index and {len(all_chunks)} metadata entries")
-        except Exception as e:
-            logger.error(f"Error saving final files: {str(e)}")
-            logger.error(traceback.format_exc())
-            return
-            
-        logger.info("Cleaning up temporary files")
-        try:
-            shutil.rmtree(TEMP_DIR)
-        except Exception as e:
-            logger.error(f"Error cleaning up temp files: {str(e)}")
-        
-        logger.info("Indexing complete!")
+        # Log summary
+        logger.info(f"Processing complete:")
+        logger.info(f"Total chunks processed: {len(chunks)}")
+        logger.info(f"Successful: {total_successful}")
+        logger.info(f"Failed: {total_failed}")
+        logger.info(f"Metadata statistics saved to: {stats_file}")
         
     except Exception as e:
-        logger.error(f"Unexpected error in main: {str(e)}")
+        logger.error(f"Error in main function: {str(e)}")
         logger.error(traceback.format_exc())
-        
+
 if __name__ == "__main__":
     main() 
