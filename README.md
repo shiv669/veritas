@@ -16,23 +16,64 @@ Designed for transparency, adaptability, and epistemic trust, Veritas empowers r
 - **Continual Learning** – Modular RAG pipeline allows weekly updates without retraining.
 - **RLHF/DPO Alignment** – Fine-tuned with human feedback for scientific accuracy and citation quality.
 
+## Repository Structure
+
+The Veritas project is organized as follows:
+
+- `src/veritas/` - Core package implementation
+  - `__init__.py` - Package initialization and exports
+  - `config.py` - Configuration settings
+  - `chunking.py` - Text chunking implementation
+  - `rag.py` - RAG system implementation
+  - `mps_utils.py` - MPS (Metal Performance Shaders) utilities
+  - `utils.py` - General utility functions
+
+- `scripts/` - Utility scripts
+  - `chunk_data.py` - Text chunking script
+  - `index_chunks.py` - Indexing script
+  - `index_chunks_parallel.py` - Parallel indexing
+  - `improved_chunking.py` - Enhanced chunking
+  - `process_json.py` - JSON processing
+  - `analyze_chunks.py` - Chunk analysis
+  - `analyze_fulltext.py` - Full text analysis
+  - `clean_encoding.py` - Encoding cleanup
+  - `process_text.py` - Text processing
+  - `cleanup.py` - Cleanup utilities
+
+- `tests/` - Test suite
+  - `test_rag_system.py` - RAG system tests
+  - `test_rag_workflow.py` - Workflow tests
+  - `test_rag_performance.py` - Performance tests
+  - `test_rag_response.py` - Response quality tests
+  - `test_mps_performance.py` - MPS tests
+  - `test_process.py` - Processing tests
+  - `test_rag.py` - RAG module tests
+  - `test_chunking.py` - Chunking tests
+  - `test_docs/` - Test documentation
+  - `test_results/` - Test results
+
+- `data/` - Data directory
+  - `input/` - Input data
+  - `output/` - Output data
+  - `chunks/` - Processed chunks
+  - `indices/` - FAISS indices
+
+- `models/` - Model directory
+  - `embeddings/` - Embedding models
+  - `faiss/` - FAISS indices
+  - `mistral/` - Mistral model files
+
+- `docs/` - Documentation and resources
+  - `chunk_size_distribution.png` - Chunk size visualization
+
+- `logs/` - Log files
+
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/veritas.git
-cd veritas
-```
+To install the package in development mode:
 
-2. Create and activate a virtual environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Project Structure
