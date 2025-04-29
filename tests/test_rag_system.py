@@ -40,7 +40,6 @@ class TestRAGSystem(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures that are reused across all tests."""
         cls.temp_dir = Path(tempfile.mkdtemp())
-        cls.model_name = "all-MiniLM-L6-v2"
         cls.test_chunks = [
             {
                 "text": "The quick brown fox jumps over the lazy dog.",
@@ -62,14 +61,14 @@ class TestRAGSystem(unittest.TestCase):
             json.dump({"chunks": cls.test_chunks}, f)
             
         # Initialize the RAG system
-        cls.rag = RAGSystem(embedding_model=cls.model_name)
+        cls.rag = RAGSystem()
         
         # Create a larger test dataset for performance tests
         cls.large_test_chunks = []
         for i in range(100):
             cls.large_test_chunks.append({
-                "text": f"Test document {i} with some content for testing purposes.",
-                "metadata": {"source": f"test{i}", "chunk_index": i}
+                "text": f"Test document {i} with some random content: {''.join(random.choices(string.ascii_letters, k=50))}",
+                "metadata": {"source": f"test{i}", "chunk_index": 0}
             })
         
         # Create edge case test data

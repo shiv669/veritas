@@ -9,7 +9,7 @@ from veritas.rag import RAGSystem
 
 def main():
     # Load processed documents
-    with open("data/processed_1.json", "r", encoding="utf-8") as f:
+    with open("data/1.json", "r", encoding="utf-8") as f:
         data = json.load(f)
         documents = [doc["content"] for doc in data["documents"]]
     

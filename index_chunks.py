@@ -3,7 +3,7 @@
 index_chunks.py
 
 Script to index the processed chunks into the RAG system.
-This script loads the chunks from data/chunks.json and builds a FAISS index.
+This script loads the documents from data/processed_1.json and builds a FAISS index.
 """
 
 import json
@@ -13,10 +13,6 @@ from tqdm import tqdm
 
 from veritas.rag import RAGSystem
 from veritas.config import (
-    DEFAULT_EMBEDDING_MODEL,
-    DEFAULT_FAISS_TYPE,
-    DEFAULT_NLIST,
-    DEFAULT_BATCH_SIZE,
     FAISS_INDEX_FILE,
     METADATA_FILE
 )
@@ -28,49 +24,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Define the chunks file path
-CHUNKS_FILE = Path("data/chunks.json")
+# Define the input file path
+INPUT_FILE = Path("data/processed_1.json")
 
 def main():
-    """Main function to index chunks into the RAG system."""
-    # Check if chunks file exists
-    if not CHUNKS_FILE.exists():
-        logger.error(f"Chunks file not found: {CHUNKS_FILE}")
+    """Main function to index documents into the RAG system."""
+    # Check if input file exists
+    if not INPUT_FILE.exists():
+        logger.error(f"Input file not found: {INPUT_FILE}")
         return
     
-    # Load chunks
-    logger.info(f"Loading chunks from {CHUNKS_FILE}")
-    with open(CHUNKS_FILE, 'r', encoding='utf-8') as f:
-        chunks = json.load(f)
+    # Load documents
+    logger.info(f"Loading documents from {INPUT_FILE}")
+    with open(INPUT_FILE, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        if isinstance(data, dict) and "documents" in data:
+            documents = data["documents"]
+        else:
+            documents = data
     
-    logger.info(f"Loaded {len(chunks)} chunks")
+    logger.info(f"Loaded {len(documents)} documents")
     
     # Initialize RAG system
     logger.info("Initializing RAG system")
-    rag = RAGSystem(
-        embedding_model=DEFAULT_EMBEDDING_MODEL,
-        faiss_type=DEFAULT_FAISS_TYPE,
-        nlist=DEFAULT_NLIST,
-        batch_size=DEFAULT_BATCH_SIZE
-    )
+    logger.info("Using CPU for embedding generation")
+    rag = RAGSystem(device="cpu")
     
-    # Build index
-    logger.info("Building FAISS index")
-    rag.build_index(chunks)
+    # Process documents and build index
+    logger.info("Processing documents and building FAISS index")
+    rag.process_documents(documents)
     
     logger.info(f"Index built successfully and saved to {FAISS_INDEX_FILE}")
     logger.info(f"Metadata saved to {METADATA_FILE}")
     
     # Test retrieval
     logger.info("Testing retrieval with a sample query")
-    test_query = "What are the effects of unionization on workplace safety?"
+    test_query = "What are the key components of a RAG system?"
     results = rag.retrieve(test_query, k=3)
     
-    logger.info(f"Sample query: '{test_query}'")
-    for i, result in enumerate(results):
-        logger.info(f"Result {i+1} (score: {result['score']:.4f}):")
-        logger.info(f"  {result['text'][:200]}...")
-        logger.info(f"  Source: {result.get('source', 'Unknown')}")
+    logger.info(f"\nSample query: '{test_query}'")
+    for i, result in enumerate(results, 1):
+        logger.info(f"\nResult {i} (Score: {result['score']:.4f}):")
+        logger.info(result['text'][:200] + "..." if len(result['text']) > 200 else result['text'])
 
 if __name__ == "__main__":
     main() 

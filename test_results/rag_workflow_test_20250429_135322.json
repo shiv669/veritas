@@ -130,40 +130,40 @@
     "embedding": {
       "num_embeddings": 1,
       "embedding_dim": 768,
-      "duration": 0.09850788116455078,
-      "throughput": 10.15147202617796
+      "duration": 0.11942625045776367,
+      "throughput": 8.373368469385717
     },
     "index": {
       "num_vectors": 1,
       "dimension": 768,
-      "duration": 0.015882253646850586
+      "duration": 0.01779627799987793
     },
     "retrieval": {
       "What are the key components of a RAG system?": {
         "k=1": {
           "num_results": 1,
-          "duration": 0.051193952560424805,
+          "duration": 0.05405712127685547,
           "scores": [
             0.23859724402427673
           ]
         },
         "k=3": {
           "num_results": 1,
-          "duration": 0.014539003372192383,
+          "duration": 0.010085105895996094,
           "scores": [
             0.23859724402427673
           ]
         },
         "k=5": {
           "num_results": 1,
-          "duration": 0.010612964630126953,
+          "duration": 0.00946807861328125,
           "scores": [
             0.23859724402427673
           ]
         },
         "k=10": {
           "num_results": 1,
-          "duration": 0.00999307632446289,
+          "duration": 0.009334802627563477,
           "scores": [
             0.23859724402427673
           ]
@@ -172,28 +172,28 @@
       "Why is chunking important in RAG and what are the best practices?": {
         "k=1": {
           "num_results": 1,
-          "duration": 0.05948591232299805,
+          "duration": 0.058331966400146484,
           "scores": [
             0.36003488302230835
           ]
         },
         "k=3": {
           "num_results": 1,
-          "duration": 0.010750770568847656,
+          "duration": 0.009439945220947266,
           "scores": [
             0.36003488302230835
           ]
         },
         "k=5": {
           "num_results": 1,
-          "duration": 0.02692723274230957,
+          "duration": 0.0090789794921875,
           "scores": [
             0.36003488302230835
           ]
         },
         "k=10": {
           "num_results": 1,
-          "duration": 0.011204004287719727,
+          "duration": 0.009541749954223633,
           "scores": [
             0.36003488302230835
           ]
@@ -202,28 +202,28 @@
       "What are the main benefits of using RAG for question answering?": {
         "k=1": {
           "num_results": 1,
-          "duration": 0.057588815689086914,
+          "duration": 0.05384993553161621,
           "scores": [
             0.5049260854721069
           ]
         },
         "k=3": {
           "num_results": 1,
-          "duration": 0.010675191879272461,
+          "duration": 0.0113677978515625,
           "scores": [
             0.5049260854721069
           ]
         },
         "k=5": {
           "num_results": 1,
-          "duration": 0.010756969451904297,
+          "duration": 0.009325742721557617,
           "scores": [
             0.5049260854721069
           ]
         },
         "k=10": {
           "num_results": 1,
-          "duration": 0.010371208190917969,
+          "duration": 0.009024620056152344,
           "scores": [
             0.5049260854721069
           ]
@@ -232,28 +232,28 @@
       "What implementation considerations should be taken into account when building a RAG system?": {
         "k=1": {
           "num_results": 1,
-          "duration": 0.010126829147338867,
+          "duration": 0.00896000862121582,
           "scores": [
             0.3483436107635498
           ]
         },
         "k=3": {
           "num_results": 1,
-          "duration": 0.01093292236328125,
+          "duration": 0.008543968200683594,
           "scores": [
             0.3483436107635498
           ]
         },
         "k=5": {
           "num_results": 1,
-          "duration": 0.010622262954711914,
+          "duration": 0.009268999099731445,
           "scores": [
             0.3483436107635498
           ]
         },
         "k=10": {
           "num_results": 1,
-          "duration": 0.010995149612426758,
+          "duration": 0.008899211883544922,
           "scores": [
             0.3483436107635498
           ]
@@ -262,20 +262,20 @@
     },
     "generation": {
       "What are the key components of a RAG system?": {
-        "duration": 9.065616130828857,
-        "response_length": 341
+        "duration": 9.241710186004639,
+        "response_length": 342
       },
       "Why is chunking important in RAG and what are the best practices?": {
-        "duration": 15.738513946533203,
-        "response_length": 408
+        "duration": 10.28904914855957,
+        "response_length": 367
       },
       "What are the main benefits of using RAG for question answering?": {
-        "duration": 6.884990930557251,
-        "response_length": 337
+        "duration": 48.26060914993286,
+        "response_length": 470
       },
       "What implementation considerations should be taken into account when building a RAG system?": {
-        "duration": 18.416364908218384,
-        "response_length": 450
+        "duration": 36.1620306968689,
+        "response_length": 362
       }
     }
   }
