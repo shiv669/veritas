@@ -29,27 +29,28 @@ import platform
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait
+import sys
 
-from veritas.rag import RAGSystem
-from veritas.config import (
-    DEFAULT_EMBEDDING_MODEL,
-    DEFAULT_FAISS_TYPE,
-    DEFAULT_NLIST,
-    DEFAULT_BATCH_SIZE,
-    FAISS_INDEX_FILE,
-    METADATA_FILE
-)
+# Add the project root to Python path to allow imports from src
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.veritas.rag import RAGSystem
+from src.veritas.config import Config
+from src.veritas.utils import setup_logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 # Define the chunks file path
-CHUNKS_FILE = Path("data/chunks.json")
-TEMP_DIR = Path("data/temp_embeddings")
+CHUNKS_FILE = Path(os.path.join(Config.CHUNKS_DIR, "chunks.json"))
+TEMP_DIR = Path(os.path.join(Config.DATA_DIR, "temp_embeddings"))
+FAISS_INDEX_FILE = os.path.join(Config.INDICES_DIR, "index.faiss")
+METADATA_FILE = os.path.join(Config.INDICES_DIR, "metadata.json")
+
+# Default settings
+DEFAULT_EMBEDDING_MODEL = Config.EMBEDDING_MODEL
+DEFAULT_FAISS_TYPE = "IndexFlatIP"  # Inner product (cosine similarity)
+DEFAULT_NLIST = 100  # Number of clusters for IVF
+DEFAULT_BATCH_SIZE = 32
 
 # M4 Max specific optimizations
 IS_APPLE_SILICON = platform.processor() == 'arm'

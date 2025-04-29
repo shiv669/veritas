@@ -1,7 +1,18 @@
+#!/usr/bin/env python3
+"""
+Script to chunk JSON data into overlapping chunks for RAG processing.
+"""
+
 import json
 import os
+import sys
 from typing import List, Dict, Any
 from tqdm import tqdm
+
+# Add the project root to Python path to allow imports from src
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.veritas.config import Config
+from src.veritas.chunking import chunk_text
 
 def load_json_file(file_path: str) -> Dict[str, Any]:
     """Load JSON file and return its contents."""
@@ -20,29 +31,8 @@ def create_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> List
     Returns:
         List of text chunks
     """
-    chunks = []
-    start = 0
-    text_length = len(text)
-    
-    while start < text_length:
-        end = start + chunk_size
-        
-        if end >= text_length:
-            chunks.append(text[start:])
-            break
-            
-        # Try to find a good breaking point (end of sentence or paragraph)
-        break_chars = ['. ', '\n\n', '! ', '? ']
-        for char in break_chars:
-            last_break = text[start:end].rfind(char)
-            if last_break != -1:
-                end = start + last_break + len(char)
-                break
-        
-        chunks.append(text[start:end])
-        start = end - overlap
-    
-    return chunks
+    # Use the chunking implementation from the veritas package
+    return chunk_text(text, chunk_size=chunk_size, overlap=overlap)
 
 def process_json_file(input_file: str, output_dir: str, chunk_size: int = 1000, overlap: int = 200):
     """
@@ -89,9 +79,9 @@ def process_json_file(input_file: str, output_dir: str, chunk_size: int = 1000, 
     print(f"Saved chunks to {output_file}")
 
 if __name__ == "__main__":
-    input_file = "data/1.json"
-    output_dir = "data/chunks"
-    chunk_size = 1000  # Adjust based on your needs
-    overlap = 200      # Adjust based on your needs
+    input_file = os.path.join(Config.INPUT_DIR, "1.json")
+    output_dir = Config.CHUNKS_DIR
+    chunk_size = Config.DEFAULT_CHUNK_SIZE
+    overlap = Config.DEFAULT_CHUNK_OVERLAP
     
     process_json_file(input_file, output_dir, chunk_size, overlap) 

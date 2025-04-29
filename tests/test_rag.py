@@ -6,6 +6,7 @@ A simple script to test the RAG system with the newly created index.
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -17,11 +18,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent.absolute()
+project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from veritas.rag import RAGSystem
-from veritas.config import FAISS_INDEX_FILE, METADATA_FILE
+from src.veritas.rag import RAGSystem
+from src.veritas.config import Config
 
 def format_chunk_content(chunk):
     """Format chunk content for display."""
@@ -44,7 +45,8 @@ def main():
         
         # Load the index
         logger.info("Loading index...")
-        rag.load_index()
+        index_path = os.path.join(Config.INDICES_DIR, "latest")
+        rag.load_index(index_path)
         
         # Test queries
         test_queries = [

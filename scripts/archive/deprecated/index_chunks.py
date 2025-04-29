@@ -8,14 +8,15 @@ This script loads the documents from data/processed_1.json and builds a FAISS in
 
 import json
 import logging
+import os
+import sys
 from pathlib import Path
 from tqdm import tqdm
 
-from veritas.rag import RAGSystem
-from veritas.config import (
-    FAISS_INDEX_FILE,
-    METADATA_FILE
-)
+# Add the project root to Python path to allow imports from src
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.veritas.rag import RAGSystem
+from src.veritas.config import Config
 
 # Configure logging
 logging.basicConfig(
@@ -25,7 +26,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define the input file path
-INPUT_FILE = Path("data/processed_1.json")
+INPUT_FILE = Path(os.path.join(Config.DATA_DIR, "processed_1.json"))
+FAISS_INDEX_FILE = os.path.join(Config.INDICES_DIR, "index.faiss")
+METADATA_FILE = os.path.join(Config.INDICES_DIR, "metadata.json")
 
 def main():
     """Main function to index documents into the RAG system."""
@@ -33,6 +36,9 @@ def main():
     if not INPUT_FILE.exists():
         logger.error(f"Input file not found: {INPUT_FILE}")
         return
+    
+    # Ensure index directory exists
+    os.makedirs(os.path.dirname(FAISS_INDEX_FILE), exist_ok=True)
     
     # Load documents
     logger.info(f"Loading documents from {INPUT_FILE}")

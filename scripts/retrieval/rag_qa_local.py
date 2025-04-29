@@ -2,266 +2,113 @@
 """
 rag_qa_local.py
 
-Local RAG QA system with support for different prompt templates and generation parameters.
+A minimal RAG QA loop without any external API:
+ 1. Dense retrieval via FAISS + SentenceTransformers
+ 2. Prompt construction with top-K contexts
+ 3. Answer generation via a local Hugging Face–style model
 """
 
-import json
-import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
-import torch
-from dataclasses import dataclass
-from enum import Enum
-import sys
+import os
+import argparse
+import pickle
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from veritas.config import (
-    MODELS_DIR, LOGS_DIR,
-    DEFAULT_GEN_MODEL, MAX_NEW_TOKENS,
-    TEMPERATURE
-)
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOGS_DIR / "rag_qa.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# ─── CONFIG ────────────────────────────────────────────────────────────────────
+DEFAULT_INDEX   = "veritas_faiss.index"
+DEFAULT_META    = "veritas_metadata.pkl"
+DEFAULT_EMBED   = "all-MiniLM-L6-v2"
+DEFAULT_GEN     = "meta-llama/Llama-2-7b-chat-hf"  # your local model
+DEFAULT_TOP_K   = 5
+DEVICE          = "mps"  # or "cpu"
 
-class PromptTemplate(Enum):
-    """Available prompt templates."""
-    DEFAULT = "default"
-    DETAILED = "detailed"
-    CONCISE = "concise"
-    ANALYTICAL = "analytical"
+# ─── RETRIEVAL ─────────────────────────────────────────────────────────────────
+def retrieve(query, index_path, meta_path, embed_model, top_k):
+    embedder = SentenceTransformer(embed_model, device=DEVICE)
+    index = faiss.read_index(index_path)
+    with open(meta_path, "rb") as f:
+        metas = pickle.load(f)
 
-@dataclass
-class GenerationConfig:
-    """Configuration for text generation."""
-    model_name: str = DEFAULT_GEN_MODEL
-    max_new_tokens: int = MAX_NEW_TOKENS
-    temperature: float = TEMPERATURE
-    top_p: float = 0.9
-    top_k: int = 50
-    repetition_penalty: float = 1.1
-    do_sample: bool = True
+    q_vec = embedder.encode([query], normalize_embeddings=True)
+    q_vec = np.asarray(q_vec, dtype="float32")
+    scores, idxs = index.search(q_vec, top_k)
 
-class PromptManager:
-    """Manager for different prompt templates."""
-    
-    TEMPLATES = {
-        PromptTemplate.DEFAULT: """
-Context: {context}
+    hits = []
+    for score, idx in zip(scores[0], idxs[0]):
+        if idx < 0 or idx >= len(metas):
+            continue
+        m = metas[idx]
+        hits.append({
+            "score": score,
+            "text":  m.get("text", "")[:500],
+            "title": m.get("title", ""),
+            "id":    m.get("id", "")
+        })
+    return hits
 
-Question: {question}
-
-Answer the question based on the context above. If the context doesn't contain relevant information, say "I don't have enough information to answer this question."
-""",
-        PromptTemplate.DETAILED: """
-Context: {context}
-
-Question: {question}
-
-Please provide a detailed answer to the question based on the context above. Include relevant facts and explanations. If the context doesn't contain relevant information, say "I don't have enough information to answer this question."
-""",
-        PromptTemplate.CONCISE: """
-Context: {context}
-
-Question: {question}
-
-Provide a brief, direct answer to the question based on the context above. If the context doesn't contain relevant information, say "I don't have enough information to answer this question."
-""",
-        PromptTemplate.ANALYTICAL: """
-Context: {context}
-
-Question: {question}
-
-Analyze the question and context carefully. Provide a well-reasoned answer that:
-1. Addresses the key points in the question
-2. Uses specific information from the context
-3. Explains the reasoning behind the answer
-
-If the context doesn't contain relevant information, say "I don't have enough information to answer this question."
-"""
-    }
-    
-    @classmethod
-    def get_prompt(cls, template: PromptTemplate, context: str, question: str) -> str:
-        """Get formatted prompt from template."""
-        return cls.TEMPLATES[template].format(
-            context=context,
-            question=question
-        )
-
-class OutputFormatter:
-    """Formatter for different output formats."""
-    
-    @staticmethod
-    def format_json(answer: str, sources: List[Dict]) -> str:
-        """Format output as JSON."""
-        return json.dumps({
-            "answer": answer,
-            "sources": sources
-        }, indent=2)
-    
-    @staticmethod
-    def format_text(answer: str, sources: List[Dict]) -> str:
-        """Format output as plain text."""
-        output = [f"Answer: {answer}\n"]
-        if sources:
-            output.append("Sources:")
-            for i, source in enumerate(sources, 1):
-                output.append(f"{i}. {source.get('text', '')[:200]}...")
-                if source.get('metadata'):
-                    output.append(f"   Source: {source.get('metadata', {}).get('source', 'Unknown')}")
-        return "\n".join(output)
-    
-    @staticmethod
-    def format_markdown(answer: str, sources: List[Dict]) -> str:
-        """Format output as markdown."""
-        output = [f"## Answer\n\n{answer}\n"]
-        if sources:
-            output.append("## Sources\n")
-            for i, source in enumerate(sources, 1):
-                output.append(f"### Source {i}\n")
-                output.append(source.get('text', ''))
-                if source.get('metadata'):
-                    output.append("\n**Metadata:**")
-                    for key, value in source['metadata'].items():
-                        output.append(f"- **{key}**: {value}")
-                output.append("")
-        return "\n".join(output)
-
-class RAGQA:
-    """RAG-based Question Answering system."""
-    
-    def __init__(
-        self,
-        search_results: List[Dict],
-        model: Any,
-        generation_config: Optional[GenerationConfig] = None,
-        prompt_template: PromptTemplate = PromptTemplate.DEFAULT
-    ):
-        self.search_results = search_results
-        self.model = model
-        self.generation_config = generation_config or GenerationConfig()
-        self.prompt_template = prompt_template
-    
-    def _prepare_context(self) -> str:
-        """Prepare context from search results."""
-        return "\n\n".join(result['text'] for result in self.search_results)
-    
-    def _generate_answer(self, prompt: str) -> str:
-        """Generate answer using the model."""
-        try:
-            inputs = self.model.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.generation_config.max_new_tokens,
-                temperature=self.generation_config.temperature,
-                top_p=self.generation_config.top_p,
-                top_k=self.generation_config.top_k,
-                repetition_penalty=self.generation_config.repetition_penalty,
-                do_sample=self.generation_config.do_sample
-            )
-            return self.model.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        except Exception as e:
-            logger.error(f"Error generating answer: {e}")
-            return "I encountered an error while generating the answer."
-
-def answer_question(
-    question: str,
-    search_results: List[Dict],
-    model: Any,
-    generation_config: Optional[GenerationConfig] = None,
-    prompt_template: PromptTemplate = PromptTemplate.DEFAULT,
-    output_format: str = "json"
-) -> str:
-    """
-    Answer a question using RAG.
-    
-    Args:
-        question: Question to answer
-        search_results: List of search results
-        model: Language model instance
-        generation_config: Generation configuration
-        prompt_template: Prompt template to use
-        output_format: Output format (json, text, markdown)
-    
-    Returns:
-        Formatted answer with sources
-    """
-    # Initialize RAG QA system
-    rag = RAGQA(
-        search_results,
-        model,
-        generation_config,
-        prompt_template
+# ─── GENERATION ────────────────────────────────────────────────────────────────
+def generate_answer_local(query, contexts, gen_model):
+    # Load tokenizer & model once
+    tokenizer = AutoTokenizer.from_pretrained(gen_model)
+    model     = AutoModelForCausalLM.from_pretrained(
+        gen_model,
+        device_map="auto",
+        torch_dtype="auto"
     )
-    
-    # Prepare context and prompt
-    context = rag._prepare_context()
-    prompt = PromptManager.get_prompt(prompt_template, context, question)
-    
-    # Generate answer
-    answer = rag._generate_answer(prompt)
-    
-    # Format output
-    if output_format == "json":
-        return OutputFormatter.format_json(answer, search_results)
-    elif output_format == "text":
-        return OutputFormatter.format_text(answer, search_results)
-    elif output_format == "markdown":
-        return OutputFormatter.format_markdown(answer, search_results)
-    else:
-        raise ValueError(f"Unsupported output format: {output_format}")
+    # Build prompt
+    system = "You are a helpful assistant. Answer using ONLY the provided context."
+    context_block = "\n\n---\n\n".join(contexts)
+    prompt = (
+        f"{system}\n\n"
+        f"Context:\n{context_block}\n\n"
+        f"Question: {query}\n\n"
+        f"Answer:"
+    )
+    # Set up a text-generation pipeline
+    gen = pipeline(
+        "text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        device_map="auto",
+        torch_dtype="auto",
+        max_new_tokens=256,
+        temperature=0.0
+    )
+    out = gen(prompt, return_full_text=False)[0]["generated_text"]
+    # Trim off the prompt
+    return out[len(prompt):].strip()
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser(description="RAG QA with local generation")
+    parser.add_argument("--index",       type=str, default=DEFAULT_INDEX, help="FAISS index path")
+    parser.add_argument("--meta",        type=str, default=DEFAULT_META,  help="Metadata pickle path")
+    parser.add_argument("--embed-model", type=str, default=DEFAULT_EMBED, help="Embedding model name")
+    parser.add_argument("--gen-model",   type=str, default=DEFAULT_GEN,   help="Local LLM model name")
+    parser.add_argument("--query",       type=str, required=True,         help="Your question")
+    parser.add_argument("--top_k",       type=int, default=DEFAULT_TOP_K, help="Number of passages to retrieve")
+    args = parser.parse_args()
+
+    # 1) Retrieve
+    hits = retrieve(args.query, args.index, args.meta, args.embed_model, args.top_k)
+    if not hits:
+        print("⚠️ No passages found.")
+        return
+
+    snippets = [h["text"] for h in hits]
+
+    # 2) Generate locally
+    answer = generate_answer_local(args.query, snippets, args.gen_model)
+
+    # 3) Display
+    print("\n📝 Answer:\n")
+    print(answer)
+    print("\n🔍 Retrieved passages:")
+    for i, h in enumerate(hits, 1):
+        print(f"{i}. [{h['score']:.3f}] {h['title']} (id={h['id']})")
 
 if __name__ == "__main__":
-    import argparse
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    
-    parser = argparse.ArgumentParser(description="RAG-based Question Answering")
-    parser.add_argument("question", type=str, help="Question to answer")
-    parser.add_argument("--search-results", type=str, required=True,
-                      help="Path to JSON file containing search results")
-    parser.add_argument("--model-name", type=str, default=DEFAULT_GEN_MODEL,
-                      help="Name of the language model to use")
-    parser.add_argument("--prompt-template", type=str,
-                      choices=[t.value for t in PromptTemplate],
-                      default=PromptTemplate.DEFAULT.value,
-                      help="Prompt template to use")
-    parser.add_argument("--output-format", type=str,
-                      choices=["json", "text", "markdown"],
-                      default="json", help="Output format")
-    
-    args = parser.parse_args()
-    
-    # Load search results
-    with open(args.search_results, 'r') as f:
-        search_results = json.load(f)
-    
-    # Load model
-    model = AutoModelForCausalLM.from_pretrained(args.model_name)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    model.tokenizer = tokenizer
-    model.device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(model.device)
-    
-    # Create generation config
-    generation_config = GenerationConfig(model_name=args.model_name)
-    
-    # Generate answer
-    result = answer_question(
-        args.question,
-        search_results,
-        model,
-        generation_config,
-        PromptTemplate(args.prompt_template),
-        args.output_format
-    )
-    print(result)
+    main()

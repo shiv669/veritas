@@ -4,12 +4,19 @@ Script to build and test the RAG system.
 """
 
 import json
+import os
+import sys
 from pathlib import Path
-from veritas.rag import RAGSystem
+
+# Add the project root to Python path to allow imports from src
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.veritas.rag import RAGSystem
+from src.veritas.config import Config
 
 def main():
     # Load processed documents
-    with open("data/1.json", "r", encoding="utf-8") as f:
+    documents_path = os.path.join(Config.DATA_DIR, "1.json")
+    with open(documents_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         documents = [doc["content"] for doc in data["documents"]]
     
