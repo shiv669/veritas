@@ -41,7 +41,7 @@ from src.veritas.utils import setup_logging
 logger = setup_logging(__name__)
 
 # Define the chunks file path
-CHUNKS_FILE = Path(os.path.join(Config.CHUNKS_DIR, "chunks.json"))
+CHUNKS_FILE = Path(os.path.join(Config.CHUNKS_DIR, "chunked_data.json"))
 TEMP_DIR = Path(os.path.join(Config.DATA_DIR, "temp_embeddings"))
 FAISS_INDEX_FILE = os.path.join(Config.INDICES_DIR, "index.faiss")
 METADATA_FILE = os.path.join(Config.INDICES_DIR, "metadata.json")
