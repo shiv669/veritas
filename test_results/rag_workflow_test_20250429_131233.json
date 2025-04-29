@@ -1,0 +1,225 @@
+{
+  "device": "mps",
+  "model_settings": {
+    "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+    "generation_model": "mistralai/Mistral-7B-Instruct-v0.3",
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "repetition_penalty": 1.1
+  },
+  "performance_settings": {
+    "embed_batch_size": 32,
+    "gen_batch_size": 1,
+    "embed_max_length": 2048,
+    "gen_max_length": 2048,
+    "chunk_size": 512
+  },
+  "results": {
+    "chunking": {
+      "fixed": {
+        "num_chunks": 1,
+        "avg_chunk_size": 236.0,
+        "chunks": [
+          {
+            "text": "Retrieval-Augmented Generation (RAG) Systems RAG is a powerful approach that combines large language models with information retrieval to generate more accurate and factual responses. Here are the key components and concepts: Key Components: 1. Document Retriever: Uses dense or sparse embeddings to find relevant documents 2. Context Processor: Chunks and processes documents for efficient retrieval 3. Generator Model: A large language model that generates responses using retrieved context 4. Vector Store: Database for storing and searching document embeddings Chunking in RAG: Chunking is crucial for several reasons: - Breaks large documents into manageable pieces - Enables more precise retrieval of relevant information - Helps maintain context windows within model limits - Improves search accuracy by focusing on specific segments - Allows for better handling of document structure Best Practices: - Use semantic chunking when possible - Maintain appropriate chunk sizes (typically 256-1024 tokens) - Include overlap between chunks to preserve context - Store metadata with chunks for better retrieval - Implement proper preprocessing and cleaning Benefits of RAG: 1. Reduced hallucination through grounding in documents 2. Improved accuracy and factuality of responses 3. Ability to handle domain-specific knowledge 4. Dynamic knowledge updates without model retraining 5. Better transparency and traceability of information Implementation Considerations: - Choose appropriate embedding models - Optimize chunk size for your use case - Consider using hybrid search (dense + sparse) - Implement proper caching mechanisms - Monitor and evaluate retrieval quality",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "word_count": 236,
+            "strategy": "fixed",
+            "doc_id": 0
+          }
+        ]
+      },
+      "sentence": {
+        "num_chunks": 1,
+        "avg_chunk_size": 236.0,
+        "chunks": [
+          {
+            "text": "Retrieval-Augmented Generation (RAG) Systems\n\nRAG is a powerful approach that combines large language models with information retrieval to generate more accurate and factual responses. Here are the key components and concepts:\n\nKey Components:\n1. Document Retriever: Uses dense or sparse embeddings to find relevant documents\n2. Context Processor: Chunks and processes documents for efficient retrieval\n3. Generator Model: A large language model that generates responses using retrieved context\n4. Vector Store: Database for storing and searching document embeddings\n\nChunking in RAG:\nChunking is crucial for several reasons:\n- Breaks large documents into manageable pieces\n- Enables more precise retrieval of relevant information\n- Helps maintain context windows within model limits\n- Improves search accuracy by focusing on specific segments\n- Allows for better handling of document structure\n\nBest Practices:\n- Use semantic chunking when possible\n- Maintain appropriate chunk sizes (typically 256-1024 tokens)\n- Include overlap between chunks to preserve context\n- Store metadata with chunks for better retrieval\n- Implement proper preprocessing and cleaning\n\nBenefits of RAG:\n1. Reduced hallucination through grounding in documents\n2. Improved accuracy and factuality of responses\n3. Ability to handle domain-specific knowledge\n4. Dynamic knowledge updates without model retraining\n5. Better transparency and traceability of information\n\nImplementation Considerations:\n- Choose appropriate embedding models\n- Optimize chunk size for your use case\n- Consider using hybrid search (dense + sparse)\n- Implement proper caching mechanisms\n- Monitor and evaluate retrieval quality",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "word_count": 236,
+            "strategy": "sentence",
+            "doc_id": 0
+          }
+        ]
+      },
+      "paragraph": {
+        "num_chunks": 1,
+        "avg_chunk_size": 236.0,
+        "chunks": [
+          {
+            "text": "Retrieval-Augmented Generation (RAG) Systems RAG is a powerful approach that combines large language models with information retrieval to generate more accurate and factual responses. Here are the key components and concepts: Key Components: 1. Document Retriever: Uses dense or sparse embeddings to find relevant documents 2. Context Processor: Chunks and processes documents for efficient retrieval 3. Generator Model: A large language model that generates responses using retrieved context 4. Vector Store: Database for storing and searching document embeddings Chunking in RAG: Chunking is crucial for several reasons: - Breaks large documents into manageable pieces - Enables more precise retrieval of relevant information - Helps maintain context windows within model limits - Improves search accuracy by focusing on specific segments - Allows for better handling of document structure Best Practices: - Use semantic chunking when possible - Maintain appropriate chunk sizes (typically 256-1024 tokens) - Include overlap between chunks to preserve context - Store metadata with chunks for better retrieval - Implement proper preprocessing and cleaning Benefits of RAG: 1. Reduced hallucination through grounding in documents 2. Improved accuracy and factuality of responses 3. Ability to handle domain-specific knowledge 4. Dynamic knowledge updates without model retraining 5. Better transparency and traceability of information Implementation Considerations: - Choose appropriate embedding models - Optimize chunk size for your use case - Consider using hybrid search (dense + sparse) - Implement proper caching mechanisms - Monitor and evaluate retrieval quality",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "word_count": 236,
+            "strategy": "paragraph",
+            "doc_id": 0
+          }
+        ]
+      },
+      "semantic": {
+        "num_chunks": 0,
+        "avg_chunk_size": NaN,
+        "chunks": []
+      },
+      "hybrid": {
+        "num_chunks": 1,
+        "avg_chunk_size": 236.0,
+        "chunks": [
+          {
+            "text": "Retrieval-Augmented Generation (RAG) Systems RAG is a powerful approach that combines large language models with information retrieval to generate more accurate and factual responses. Here are the key components and concepts: Key Components: 1. Document Retriever: Uses dense or sparse embeddings to find relevant documents 2. Context Processor: Chunks and processes documents for efficient retrieval 3. Generator Model: A large language model that generates responses using retrieved context 4. Vector Store: Database for storing and searching document embeddings Chunking in RAG: Chunking is crucial for several reasons: - Breaks large documents into manageable pieces - Enables more precise retrieval of relevant information - Helps maintain context windows within model limits - Improves search accuracy by focusing on specific segments - Allows for better handling of document structure Best Practices: - Use semantic chunking when possible - Maintain appropriate chunk sizes (typically 256-1024 tokens) - Include overlap between chunks to preserve context - Store metadata with chunks for better retrieval - Implement proper preprocessing and cleaning Benefits of RAG: 1. Reduced hallucination through grounding in documents 2. Improved accuracy and factuality of responses 3. Ability to handle domain-specific knowledge 4. Dynamic knowledge updates without model retraining 5. Better transparency and traceability of information Implementation Considerations: - Choose appropriate embedding models - Optimize chunk size for your use case - Consider using hybrid search (dense + sparse) - Implement proper caching mechanisms - Monitor and evaluate retrieval quality",
+            "chunk_index": 0,
+            "total_chunks": 1,
+            "word_count": 236,
+            "strategy": "hybrid",
+            "doc_id": 0
+          }
+        ]
+      }
+    },
+    "embedding": {
+      "num_embeddings": 1,
+      "embedding_dim": 768,
+      "duration": 0.1172947883605957,
+      "throughput": 8.525527979348334
+    },
+    "index": {
+      "num_vectors": 1,
+      "dimension": 768,
+      "duration": 0.019375085830688477
+    },
+    "retrieval": {
+      "What are the key components of a RAG system?": {
+        "k=1": {
+          "num_results": 0,
+          "duration": 0.05310320854187012,
+          "scores": []
+        },
+        "k=3": {
+          "num_results": 0,
+          "duration": 0.01042795181274414,
+          "scores": []
+        },
+        "k=5": {
+          "num_results": 0,
+          "duration": 0.009058237075805664,
+          "scores": []
+        },
+        "k=10": {
+          "num_results": 0,
+          "duration": 0.00894618034362793,
+          "scores": []
+        }
+      },
+      "Why is chunking important in RAG and what are the best practices?": {
+        "k=1": {
+          "num_results": 1,
+          "duration": 0.06272411346435547,
+          "scores": [
+            0.36003488302230835
+          ]
+        },
+        "k=3": {
+          "num_results": 1,
+          "duration": 0.010289192199707031,
+          "scores": [
+            0.36003488302230835
+          ]
+        },
+        "k=5": {
+          "num_results": 1,
+          "duration": 0.029083967208862305,
+          "scores": [
+            0.36003488302230835
+          ]
+        },
+        "k=10": {
+          "num_results": 1,
+          "duration": 0.009835958480834961,
+          "scores": [
+            0.36003488302230835
+          ]
+        }
+      },
+      "What are the main benefits of using RAG for question answering?": {
+        "k=1": {
+          "num_results": 1,
+          "duration": 0.05798006057739258,
+          "scores": [
+            0.5049260854721069
+          ]
+        },
+        "k=3": {
+          "num_results": 1,
+          "duration": 0.018543004989624023,
+          "scores": [
+            0.5049260854721069
+          ]
+        },
+        "k=5": {
+          "num_results": 1,
+          "duration": 0.011722087860107422,
+          "scores": [
+            0.5049260854721069
+          ]
+        },
+        "k=10": {
+          "num_results": 1,
+          "duration": 0.010977983474731445,
+          "scores": [
+            0.5049260854721069
+          ]
+        }
+      },
+      "What implementation considerations should be taken into account when building a RAG system?": {
+        "k=1": {
+          "num_results": 1,
+          "duration": 0.011141777038574219,
+          "scores": [
+            0.3483436107635498
+          ]
+        },
+        "k=3": {
+          "num_results": 1,
+          "duration": 0.010901927947998047,
+          "scores": [
+            0.3483436107635498
+          ]
+        },
+        "k=5": {
+          "num_results": 1,
+          "duration": 0.010718822479248047,
+          "scores": [
+            0.3483436107635498
+          ]
+        },
+        "k=10": {
+          "num_results": 1,
+          "duration": 0.011193275451660156,
+          "scores": [
+            0.3483436107635498
+          ]
+        }
+      }
+    },
+    "generation": {
+      "What are the key components of a RAG system?": {
+        "duration": 18.7206871509552,
+        "response_length": 194
+      },
+      "Why is chunking important in RAG and what are the best practices?": {
+        "duration": 11.439927101135254,
+        "response_length": 364
+      },
+      "What are the main benefits of using RAG for question answering?": {
+        "duration": 23.51398205757141,
+        "response_length": 462
+      },
+      "What implementation considerations should be taken into account when building a RAG system?": {
+        "duration": 22.322810888290405,
+        "response_length": 464
+      }
+    }
+  }
+}

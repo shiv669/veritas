@@ -1,7 +1,8 @@
 """
-Veritas - A RAG-based question answering system
+Veritas - A RAG (Retrieval-Augmented Generation) system for efficient document processing and question answering.
 """
 
+from veritas.rag import RAGSystem
 from veritas.config import (
     # Paths
     BASE_DIR,
@@ -49,6 +50,7 @@ from veritas.config import (
     MKL_NUM_THREADS,
     USE_GPU,
     DEVICE,
+    MPS_AVAILABLE
 )
 
 from veritas.utils import (
@@ -63,4 +65,34 @@ from veritas.utils import (
     ensure_parent_dirs
 )
 
-__version__ = "0.1.0" 
+from veritas.mps_utils import (
+    get_optimal_device,
+    optimize_for_mps,
+    get_optimal_batch_size,
+    prepare_inputs_for_mps,
+    get_memory_info,
+    log_memory_info
+)
+
+__version__ = "0.1.0"
+__author__ = "Veritas Team"
+
+__all__ = [
+    "RAGSystem",
+    "DEFAULT_EMBEDDING_MODEL",
+    "DEFAULT_FAISS_TYPE",
+    "DEFAULT_NLIST",
+    "DEFAULT_BATCH_SIZE",
+    "FAISS_INDEX_FILE",
+    "METADATA_FILE",
+    "RAG_CHUNKS_FILE",
+    "DEVICE",
+    "MPS_AVAILABLE",
+    "ensure_parent_dirs",
+    "get_optimal_device",
+    "optimize_for_mps",
+    "get_optimal_batch_size",
+    "prepare_inputs_for_mps",
+    "get_memory_info",
+    "log_memory_info"
+] 

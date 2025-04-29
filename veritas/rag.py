@@ -14,86 +14,162 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from tqdm import tqdm
 import pickle
+import logging
 
 from veritas.config import (
-    DEFAULT_CHUNK_SIZE,
+    # Model settings
     DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_GEN_MODEL,
+    MAX_SEQ_LENGTH,
+    TEMPERATURE,
+    TOP_P,
+    REPETITION_PENALTY,
+    
+    # Performance settings
+    EMBED_BATCH_SIZE,
+    GEN_BATCH_SIZE,
+    MAX_SEQ_LENGTH as EMBED_MAX_LENGTH,
+    MAX_SEQ_LENGTH as GEN_MAX_LENGTH,
+    
+    # Indexing settings
+    CHUNK_SIZE as DEFAULT_CHUNK_SIZE,
     DEFAULT_FAISS_TYPE,
     DEFAULT_NLIST,
-    DEFAULT_BATCH_SIZE,
-    FAISS_INDEX_FILE,
-    METADATA_FILE,
-    RAG_CHUNKS_FILE
+    
+    # File paths
+    FAISS_INDEX_PATH as FAISS_INDEX_FILE,
+    METADATA_PATH as METADATA_FILE,
+    
+    # Device settings
+    DEVICE,
+    get_device
 )
 from veritas.utils import ensure_parent_dirs
+from .mps_utils import optimize_for_mps, prepare_inputs_for_mps
+from .chunking import Chunker, ChunkingConfig, ChunkingStrategy
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class RAGSystem:
-    def __init__(
-        self,
-        embedding_model: str = "all-MiniLM-L6-v2",
-        chunk_size: int = 512,
-        faiss_type: str = "flat",
-        nlist: int = 100,
-        batch_size: int = 32
-    ):
-        """Initialize the RAG system with specified parameters."""
-        self.embedding_model = SentenceTransformer(embedding_model)
-        self.chunk_size = chunk_size
-        self.faiss_type = faiss_type
-        self.nlist = nlist
-        self.batch_size = batch_size
+    def __init__(self, device=None):
+        """Initialize the RAG system."""
+        # Set devices for different tasks
+        self.inference_device = device or get_device()
+        self.embedding_device = device or get_device()
+        
+        logger.info(f"Initializing RAG system with inference device: {self.inference_device}")
+        logger.info(f"Using embedding device: {self.embedding_device}")
+        
+        # Initialize models on appropriate devices
+        self.embedding_model = SentenceTransformer(
+            DEFAULT_EMBEDDING_MODEL,
+            device=self.embedding_device
+        )
+        
+        self.generator = AutoModelForCausalLM.from_pretrained(
+            DEFAULT_GEN_MODEL,
+            device_map=None if self.inference_device in ["mps", "cpu"] else "auto",
+            torch_dtype=torch.float32 if self.inference_device == "mps" else torch.float16
+        )
+        
+        if self.inference_device in ["mps", "cpu"]:
+            self.generator = self.generator.to(self.inference_device)
+            if self.inference_device == "mps":
+                self.generator = optimize_for_mps(self.generator)
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(DEFAULT_GEN_MODEL)
+        
+        # Initialize FAISS index
         self.index = None
-        self.metadata = []
+        self.documents = []
         
-    def process_documents(self, documents: List[str]) -> List[Dict[str, Any]]:
-        """Process documents into chunks with metadata."""
-        chunks = []
-        for doc_idx, doc in enumerate(documents):
-            # Simple chunking by splitting on whitespace
-            words = doc.split()
-            for i in range(0, len(words), self.chunk_size):
-                chunk = " ".join(words[i:i + self.chunk_size])
-                chunks.append({
-                    "text": chunk,
-                    "doc_id": doc_idx,
-                    "chunk_id": len(chunks),
-                    "start_idx": i,
-                    "end_idx": min(i + self.chunk_size, len(words))
-                })
-        return chunks
+        # Initialize chunker with default configuration
+        self.chunker = Chunker(ChunkingConfig(
+            strategy=ChunkingStrategy.HYBRID,
+            chunk_size=DEFAULT_CHUNK_SIZE,
+            overlap=50,
+            min_chunk_size=100,
+            max_chunk_size=1000
+        ))
     
-    def build_index(self, chunks: List[Dict[str, Any]]) -> None:
-        """Build FAISS index from document chunks."""
+    def generate_embeddings(self, texts):
+        """Generate embeddings for a list of texts."""
+        return self.embedding_model.encode(
+            texts,
+            batch_size=EMBED_BATCH_SIZE,
+            show_progress_bar=True,
+            device=self.embedding_device,
+            max_length=EMBED_MAX_LENGTH
+        )
+    
+    def generate_response(self, query, context):
+        """Generate a response based on the query and context."""
+        prompt = self._create_prompt(query, context)
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+        
+        # Prepare inputs for the device
+        inputs = prepare_inputs_for_mps(inputs, device=self.inference_device)
+        
+        # Generate response
+        outputs = self.generator.generate(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_length=MAX_SEQ_LENGTH,
+            num_return_sequences=1,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            repetition_penalty=REPETITION_PENALTY,
+            do_sample=True
+        )
+        
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    def process_documents(self, documents: List[Dict[str, Any]]) -> None:
+        """Process documents and build FAISS index."""
+        # Generate chunks using the chunker
+        all_chunks = []
+        for doc_idx, doc in enumerate(documents):
+            # Extract content from document dictionary
+            content = doc["content"] if isinstance(doc, dict) else doc
+            chunks = self.chunker.chunk_text(content)
+            # Add document index to chunk metadata
+            for chunk in chunks:
+                chunk["doc_id"] = doc_idx
+            all_chunks.extend(chunks)
+        
+        if not all_chunks:
+            logger.warning("No chunks were generated from the documents")
+            return
+        
         # Generate embeddings
-        texts = [chunk["text"] for chunk in chunks]
-        embeddings = []
-        
-        for i in tqdm(range(0, len(texts), self.batch_size)):
-            batch = texts[i:i + self.batch_size]
-            batch_embeddings = self.embedding_model.encode(batch, normalize_embeddings=True)
-            embeddings.append(batch_embeddings)
-        
-        embeddings = np.vstack(embeddings)
+        texts = [chunk["text"] for chunk in all_chunks]
+        embeddings = self.generate_embeddings(texts)
         
         # Initialize FAISS index
         dimension = embeddings.shape[1]
-        if self.faiss_type == "flat":
+        if DEFAULT_FAISS_TYPE == "flat":
             self.index = faiss.IndexFlatIP(dimension)  # Use Inner Product for normalized vectors
-        elif self.faiss_type == "ivf":
+        elif DEFAULT_FAISS_TYPE == "ivf":
             quantizer = faiss.IndexFlatIP(dimension)
-            self.index = faiss.IndexIVFFlat(quantizer, dimension, self.nlist, faiss.METRIC_INNER_PRODUCT)
+            self.index = faiss.IndexIVFFlat(quantizer, dimension, DEFAULT_NLIST, faiss.METRIC_INNER_PRODUCT)
             self.index.train(embeddings)
         
         # Add vectors to index
         self.index.add(embeddings)
-        self.metadata = chunks
+        self.documents = all_chunks
         
         # Save index and metadata
         ensure_parent_dirs(FAISS_INDEX_FILE)
         ensure_parent_dirs(METADATA_FILE)
         faiss.write_index(self.index, str(FAISS_INDEX_FILE))
         with open(METADATA_FILE, 'wb') as f:
-            pickle.dump(self.metadata, f)
+            pickle.dump(self.documents, f)
+        
+        logger.info(f"Processed {len(documents)} documents into {len(all_chunks)} chunks")
+        logger.info(f"Built FAISS index with {self.index.ntotal} vectors of dimension {dimension}")
+        logger.info(f"Index saved to {FAISS_INDEX_FILE}")
+        logger.info(f"Metadata saved to {METADATA_FILE}")
     
     def load_index(self) -> None:
         """Load existing FAISS index and metadata."""
@@ -102,83 +178,40 @@ class RAGSystem:
         
         self.index = faiss.read_index(str(FAISS_INDEX_FILE))
         with open(METADATA_FILE, 'rb') as f:
-            self.metadata = pickle.load(f)
+            self.documents = pickle.load(f)
     
-    def retrieve(self, query: str, k: int = 5, min_score: float = 0.3) -> List[Dict[str, Any]]:
-        """Retrieve most relevant chunks for a query.
-        
-        Args:
-            query: The query string to search for
-            k: Number of results to return
-            min_score: Minimum similarity score threshold (0 to 1)
-            
-        Returns:
-            List of dictionaries containing the retrieved chunks and their metadata
-        """
+    def retrieve(self, query: str, k: int = 5, min_score: float = 0.2) -> List[Dict[str, Any]]:
+        """Retrieve relevant chunks for a query."""
         if self.index is None:
             raise ValueError("Index not built or loaded")
         
         # Generate query embedding
-        query_embedding = self.embedding_model.encode([query], normalize_embeddings=True)
+        query_embedding = self.generate_embeddings([query])
         
         # Search in index
-        scores, indices = self.index.search(query_embedding, k * 2)  # Get more results to filter
+        scores, indices = self.index.search(query_embedding, k)
         
-        # Filter and deduplicate results
-        seen_contents = set()
+        # Filter and format results
         results = []
-        
         for idx, score in zip(indices[0], scores[0]):
-            if idx < len(self.metadata):  # Ensure index is valid
-                chunk = self.metadata[idx].copy()
-                
-                # Convert distance to similarity score (for inner product, higher is better)
-                score = float(score)
-                
-                # Get the content to check for duplicates
-                content = str(chunk.get('content', chunk.get('text', '')))
-                
-                # Skip if score is too low or content is duplicate
-                if score < min_score or content in seen_contents:
-                    continue
-                
-                chunk["score"] = score
+            if idx < len(self.documents):  # Ensure index is valid
+                chunk = self.documents[idx].copy()
+                chunk["score"] = float(score)  # Convert numpy float to Python float
                 results.append(chunk)
-                seen_contents.add(content)
-                
-                # Break if we have enough results
-                if len(results) >= k:
-                    break
+        
+        # Sort by score in descending order
+        results.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Filter by minimum score
+        results = [r for r in results if r["score"] >= min_score]
         
         return results
     
-    def generate_response(
-        self,
-        query: str,
-        retrieved_chunks: List[Dict[str, Any]],
-        model_name: str = "facebook/opt-350m",
-        max_length: int = 200
-    ) -> str:
-        """Generate a response using retrieved chunks and language model."""
-        # Prepare context from retrieved chunks
-        context = "\n".join([chunk["text"] for chunk in retrieved_chunks])
-        
-        # Initialize model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        
-        # Prepare prompt
-        prompt = f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"
-        
-        # Generate response
-        inputs = tokenizer(prompt, return_tensors="pt")
-        outputs = model.generate(
-            inputs["input_ids"],
-            max_length=max_length,
-            num_return_sequences=1,
-            temperature=0.7,
-            do_sample=True
-        )
-        
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return response.split("Answer:")[-1].strip() 
+    def _create_prompt(self, query, context):
+        """Create a prompt based on the query and context."""
+        return f"""<s>[INST] You are a helpful AI assistant. Answer the question based on the following context. If the context doesn't contain relevant information, say "I don't have enough information to answer this question."
+
+Context:
+{context}
+
+Question: {query} [/INST]""" 
