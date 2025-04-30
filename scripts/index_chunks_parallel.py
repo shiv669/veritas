@@ -47,9 +47,9 @@ parser.add_argument("--input", type=str, default="data/chunks/chunked_data.json"
                     help="Path to input chunks file")
 parser.add_argument("--output", type=str, default=None,
                     help="Output directory for index (defaults to timestamped directory)")
-parser.add_argument("--batch-size", type=int, default=16,
+parser.add_argument("--batch-size", type=int, default=64,
                     help="Batch size for processing")
-parser.add_argument("--group-size", type=int, default=10,
+parser.add_argument("--group-size", type=int, default=50,
                     help="Group size for chunk processing")
 parser.add_argument("--device", type=str, default=None,
                     help="Device to use (mps, cuda, or cpu)")
@@ -63,7 +63,7 @@ logger = setup_logging(__name__)
 # M4 Max specific optimizations
 IS_APPLE_SILICON = platform.processor() == 'arm'
 NUM_CORES = mp.cpu_count()
-NUM_WORKERS = max(1, NUM_CORES - 4)  # Leave more cores free for system
+NUM_WORKERS = max(1, NUM_CORES - 1)  # Use almost all cores, leave 1 for system
 BATCH_SIZE = args.batch_size  # Use command-line value
 GROUP_SIZE = args.group_size  # Use command-line value
 MEMORY_THRESHOLD = 0.7 * psutil.virtual_memory().total  # 70% of total RAM
