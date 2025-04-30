@@ -13,15 +13,32 @@ def process_json(input_file, output_file):
     if out_dir and not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
 
-    # Load input JSON
-    with open(input_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    # Load input JSON, support standard JSON or JSON Lines (one JSON object per line)
+    try:
+        with open(input_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        # Fallback to JSON Lines format
+        documents = []
+        with open(input_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    documents.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    print(f"Skipping invalid JSON line: {e}")
+        data = documents
 
     # Extract documents list
     if isinstance(data, dict) and 'documents' in data and isinstance(data['documents'], list):
         documents = data['documents']
-    else:
+    elif isinstance(data, list):
         documents = data
+    else:
+        # Wrap single document as list
+        documents = [data]
 
     # Save processed JSON list
     with open(output_file, 'w', encoding='utf-8') as f:

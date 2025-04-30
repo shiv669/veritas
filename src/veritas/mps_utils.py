@@ -1,113 +1,115 @@
 """
-Utilities for working with Apple's Metal Performance Shaders (MPS) backend
+MPS (Metal Performance Shaders) utilities for Apple Silicon
 """
-import os
-import platform
 import torch
+import logging
+import os
 from typing import Any, Dict, Optional
-from .utils import setup_logging
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 def is_mps_available() -> bool:
     """
-    Check if MPS is available on the current system
+    Check if MPS is available on this system.
     
     Returns:
         True if MPS is available, False otherwise
     """
-    # Check for macOS and Apple Silicon
-    is_mac = platform.system() == "Darwin"
-    is_arm = platform.machine() == "arm64"
-    
-    # Check PyTorch MPS availability
-    has_mps = hasattr(torch, "backends") and hasattr(torch.backends, "mps")
-    mps_available = has_mps and torch.backends.mps.is_available()
-    
-    return is_mac and is_arm and mps_available
+    try:
+        if not torch.backends.mps.is_available():
+            return False
+            
+        # Test MPS by creating a small tensor
+        test_tensor = torch.zeros(1).to("mps")
+        del test_tensor
+        return True
+    except Exception as e:
+        logger.warning(f"MPS availability check failed: {e}")
+        return False
 
-
-def optimize_for_mps(model: Any) -> Any:
+def set_mps_memory_limit(memory_limit_mb: int) -> bool:
     """
-    Optimize a model for MPS
+    Set MPS memory limit in MB.
     
     Args:
-        model: PyTorch model
+        memory_limit_mb: Memory limit in MB
         
     Returns:
-        Optimized model
+        True if successful, False otherwise
     """
-    if not is_mps_available():
-        logger.warning("MPS not available, returning unmodified model")
-        return model
-    
-    # Move model to MPS device
     try:
-        model = model.to("mps")
-        logger.info("Model successfully moved to MPS device")
+        # Check if torch version supports this feature
+        if hasattr(torch.mps, 'set_per_process_memory_fraction'):
+            # Convert MB to fraction of total memory
+            total_memory = 128 * 1024  # Assume 128GB for M4
+            fraction = min(memory_limit_mb / total_memory, 0.8)  # Cap at 80%
+            torch.mps.set_per_process_memory_fraction(fraction)
+            logger.info(f"Set MPS memory fraction to {fraction:.2f}")
+            return True
+        else:
+            # Try environment variable as fallback
+            memory_limit_gb = memory_limit_mb / 1024
+            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Disable automatic growth
+            os.environ["PYTORCH_MPS_MEMORY_LIMIT"] = f"{memory_limit_gb}GB"
+            logger.info(f"Set MPS memory limit via environment variables: {memory_limit_gb}GB")
+            return True
     except Exception as e:
-        logger.warning(f"Failed to move model to MPS: {e}")
-    
-    return model
+        logger.warning(f"Failed to set MPS memory limit: {e}")
+        return False
 
-
-def set_mps_memory_limit(limit_mb: Optional[int] = None) -> None:
+def optimize_for_mps(obj: Any) -> Any:
     """
-    Set MPS memory limit
+    Apply MPS-specific optimizations to an object
     
     Args:
-        limit_mb: Memory limit in MB, or None to use default
-    """
-    if not is_mps_available():
-        logger.warning("MPS not available, skipping memory limit configuration")
-        return
-    
-    if limit_mb is not None:
-        try:
-            # Convert MB to bytes
-            limit_bytes = limit_mb * 1024 * 1024
-            torch.backends.mps.set_cache_memory_limit(limit_bytes)
-            logger.info(f"MPS memory limit set to {limit_mb} MB")
-        except Exception as e:
-            logger.warning(f"Failed to set MPS memory limit: {e}")
-
-
-def get_mps_memory_stats() -> Dict[str, float]:
-    """
-    Get MPS memory statistics
-    
+        obj: Object to optimize
+        
     Returns:
-        Dictionary with memory statistics
+        Optimized object
     """
-    stats = {
-        "allocated_mb": 0.0,
-        "reserved_mb": 0.0, 
-        "total_mb": 0.0
-    }
-    
-    if not is_mps_available():
-        logger.warning("MPS not available, returning empty memory stats")
-        return stats
-    
     try:
-        # Get memory stats (depends on PyTorch version and may not be available)
-        if hasattr(torch.mps, "current_allocated_memory"):
-            stats["allocated_mb"] = torch.mps.current_allocated_memory() / (1024 * 1024)
-        
-        if hasattr(torch.mps, "driver_allocated_memory"):
-            stats["reserved_mb"] = torch.mps.driver_allocated_memory() / (1024 * 1024)
-        
-        # Estimate total available memory
-        import subprocess
-        result = subprocess.run(
-            ["sysctl", "-n", "hw.memsize"], 
-            capture_output=True, 
-            text=True
-        )
-        if result.returncode == 0:
-            total_bytes = int(result.stdout.strip())
-            stats["total_mb"] = total_bytes / (1024 * 1024)
+        if hasattr(obj, 'model') and hasattr(obj.model, 'half'):
+            # Use half precision for model if possible
+            try:
+                obj.model = obj.model.half()
+                logger.info("Converted model to half precision")
+            except Exception as e:
+                logger.warning(f"Failed to convert model to half precision: {e}")
+                
+        if hasattr(obj, 'model') and hasattr(obj.model, 'to'):
+            # Ensure model is on MPS device
+            try:
+                obj.model = obj.model.to("mps")
+                logger.info("Moved model to MPS device")
+            except Exception as e:
+                logger.warning(f"Failed to move model to MPS device: {e}")
+                
+        if hasattr(obj, 'embedding_model') and hasattr(obj.embedding_model, 'to'):
+            # Ensure embedding model is on MPS device
+            try:
+                obj.embedding_model.to("mps")
+                logger.info("Moved embedding model to MPS device")
+            except Exception as e:
+                logger.warning(f"Failed to move embedding model to MPS device: {e}")
+                
+        return obj
     except Exception as e:
-        logger.warning(f"Failed to get MPS memory stats: {e}")
-    
-    return stats 
+        logger.warning(f"Failed to optimize for MPS: {e}")
+        return obj
+
+def optimize_memory_for_m4() -> None:
+    """
+    Apply memory optimizations for M4 Mac
+    """
+    # Set PyTorch memory management options
+    if is_mps_available():
+        # Disable automatic growth
+        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+        
+        # Set MPS memory limit to 80% of system RAM
+        os.environ["PYTORCH_MPS_MEMORY_LIMIT"] = "102GB"  # 80% of 128GB
+        
+        # Other Apple-specific optimizations
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        
+        logger.info("Applied memory optimizations for M4 Mac") 
