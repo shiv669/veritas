@@ -8,6 +8,7 @@ import os
 import sys
 from typing import List, Dict, Any
 from tqdm import tqdm
+import ijson
 
 # Add the project root to Python path to allow imports from src
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,47 +37,46 @@ def create_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> List
 
 def process_json_file(input_file: str, output_dir: str, chunk_size: int = 1000, overlap: int = 200):
     """
-    Process JSON file and create chunks.
-    
-    Args:
-        input_file: Path to input JSON file
-        output_dir: Directory to save chunked files
-        chunk_size: Maximum size of each chunk in characters
-        overlap: Number of characters to overlap between chunks
+    Process JSON file by streaming entries and creating overlapping chunks in a memory-efficient manner.
     """
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Load JSON data
-    print(f"Loading {input_file}...")
-    data = load_json_file(input_file)
-    
-    # Process each entry in the JSON
-    chunked_data = []
-    for idx, entry in enumerate(tqdm(data, desc="Processing entries")):
-        # Convert entry to string for chunking
-        entry_text = json.dumps(entry, ensure_ascii=False)
-        
-        # Create chunks
-        chunks = create_chunks(entry_text, chunk_size, overlap)
-        
-        # Add metadata to each chunk
-        for chunk_idx, chunk in enumerate(chunks):
-            chunked_data.append({
-                "chunk_id": f"{idx}_{chunk_idx}",
-                "original_id": idx,
-                "chunk_index": chunk_idx,
-                "total_chunks": len(chunks),
-                "content": chunk
-            })
-    
-    # Save chunked data
-    output_file = os.path.join(output_dir, "chunked_data.json")
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(chunked_data, f, ensure_ascii=False, indent=2)
-    
-    print(f"Created {len(chunked_data)} chunks")
-    print(f"Saved chunks to {output_file}")
+
+    output_path = os.path.join(output_dir, "chunked_data.json")
+    print(f"Streaming and chunking entries from {input_file} to {output_path}...")
+
+    # Open input and output in streaming mode
+    with open(input_file, 'rb') as in_f, open(output_path, 'w', encoding='utf-8') as out_f:
+        # Start JSON array
+        out_f.write('[\n')
+        first = True
+
+        # Stream through each entry in the JSON array
+        for idx, entry in enumerate(ijson.items(in_f, 'item')):
+            # Convert entry to string for chunking
+            entry_text = json.dumps(entry, ensure_ascii=False)
+            # Create chunks
+            chunks = create_chunks(entry_text, chunk_size, overlap)
+
+            # Write each chunk as a JSON object
+            for chunk_idx, text_chunk in enumerate(chunks):
+                obj = {
+                    'chunk_id': f"{idx}_{chunk_idx}",
+                    'original_id': idx,
+                    'chunk_index': chunk_idx,
+                    'total_chunks': len(chunks),
+                    'content': text_chunk
+                }
+                # Prepend comma if not first
+                if not first:
+                    out_f.write(',\n')
+                out_f.write(json.dumps(obj, ensure_ascii=False))
+                first = False
+
+        # End JSON array
+        out_f.write('\n]\n')
+
+    print(f"Created {idx+1} entries worth of chunks into {output_path}")
 
 if __name__ == "__main__":
     input_file = os.path.join(Config.INPUT_DIR, "1.json")

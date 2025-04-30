@@ -17,42 +17,48 @@ def analyze_fulltext_field(processed_dir):
     
     # Walk through all files in the processed directory
     for filename in os.listdir(processed_dir):
+        # Skip hidden files (e.g., ._ files)
+        if filename.startswith('.'):
+            continue
         if not filename.endswith('.json'):
             continue
             
         file_path = os.path.join(processed_dir, filename)
-        stats['total_docs'] += 1
-        
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                doc = json.load(f)
-                
-            fulltext = doc.get('fullText')
-            if fulltext:
-                stats['has_fulltext'] += 1
-                text_length = len(fulltext)
-                
-                # Categorize length into buckets
-                if text_length < 1000:
-                    bucket = '< 1K'
-                elif text_length < 5000:
-                    bucket = '1K-5K'
-                elif text_length < 10000:
-                    bucket = '5K-10K'
-                elif text_length < 50000:
-                    bucket = '10K-50K'
-                else:
-                    bucket = '> 50K'
+                data = json.load(f)
+
+            # If file contains a list of docs, iterate through each; otherwise wrap single doc
+            docs = data if isinstance(data, list) else [data]
+
+            for idx, doc in enumerate(docs):
+                stats['total_docs'] += 1
+                fulltext = doc.get('fullText')
+                if fulltext:
+                    stats['has_fulltext'] += 1
+                    text_length = len(fulltext)
                     
-                stats['length_distribution'][bucket] += 1
-                
-                # Store sample doc IDs (up to 5 each)
-                if len(stats['sample_docs']['with_text']) < 5:
-                    stats['sample_docs']['with_text'].append(filename)
-            else:
-                stats['null_fulltext'] += 1
-                if len(stats['sample_docs']['without_text']) < 5:
-                    stats['sample_docs']['without_text'].append(filename)
+                    # Categorize length into buckets
+                    if text_length < 1000:
+                        bucket = '< 1K'
+                    elif text_length < 5000:
+                        bucket = '1K-5K'
+                    elif text_length < 10000:
+                        bucket = '5K-10K'
+                    elif text_length < 50000:
+                        bucket = '10K-50K'
+                    else:
+                        bucket = '> 50K'
+                    
+                    stats['length_distribution'][bucket] += 1
+                    
+                    # Record sample filename with index
+                    if len(stats['sample_docs']['with_text']) < 5:
+                        stats['sample_docs']['with_text'].append(f"{filename}[{idx}]")
+                else:
+                    stats['null_fulltext'] += 1
+                    if len(stats['sample_docs']['without_text']) < 5:
+                        stats['sample_docs']['without_text'].append(f"{filename}[{idx}]")
                     
         except Exception as e:
             print(f"Error processing {filename}: {e}")
