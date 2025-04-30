@@ -127,9 +127,15 @@ class GradioUI:
             logger.error("Gradio is required for this UI framework")
             raise
         
-        def generate(prompt: str, top_k: int) -> tuple:
+        # Keep a history of conversations
+        conversation_history = []
+        
+        def generate(message, history, top_k):
+            # Add user message to history
+            history = history or []
+            
             # Retrieve relevant context
-            retrieved_chunks = self.rag_system.retrieve(prompt, top_k=top_k)
+            retrieved_chunks = self.rag_system.retrieve(message, top_k=top_k)
             
             # Format retrieved context for display
             context_display = ""
@@ -137,7 +143,7 @@ class GradioUI:
                 chunk_data = result.get('chunk', {})
                 text = chunk_data.get('text', '')[:500]  # Limit context display length
                 score = result.get('score', 0)
-                context_display += f"**Source {i+1}** (Score: {score:.4f}):\n\n{text}...\n\n---\n\n"
+                context_display += f"<div class='source'><div class='source-header'>Source {i+1} (Score: {score:.4f})</div><div class='source-content'>{text}...</div></div>"
             
             # Construct prompt with context
             context = "\n\n".join([result['chunk'].get('text', '') for result in retrieved_chunks])
@@ -146,43 +152,178 @@ class GradioUI:
 Context:
 {context}
 
-Question: {prompt}
+Question: {message}
 
 Answer:"""
             
             # Generate answer
             answer = self.model.generate(rag_prompt)
             
+            # Return the bot response and updated context
             return answer, context_display
         
         # CSS for styling
         css = """
-        .container {max-width: 800px; margin: auto; padding-top: 1.5rem}
-        .title {text-align: center; margin-bottom: 1rem}
-        .subtitle {text-align: center; margin-bottom: 2rem; font-size: 1.1rem}
-        .response-box {border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-top: 1rem; background-color: #f8f9fa}
-        .context-box {border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; margin-top: 1rem; background-color: #f1f3f5; max-height: 400px; overflow-y: auto}
-        .header {font-weight: bold; margin-bottom: 0.5rem}
+        :root {
+            --primary-color: #10a37f;
+            --secondary-color: #f7f7f8;
+            --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            --border-radius: 0.5rem;
+        }
+        
+        body {
+            font-family: var(--font-family);
+            color: #353740;
+            background-color: white;
+        }
+        
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            height: calc(100vh - 120px);
+        }
+        
+        .chat-container {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--border-radius);
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+        }
+        
+        .context-container {
+            flex: 1;
+            margin-left: 20px;
+            overflow-y: auto;
+            height: 100%;
+            border-radius: var(--border-radius);
+            background-color: var(--secondary-color);
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            padding: 1rem;
+        }
+        
+        .source {
+            margin-bottom: 15px;
+            border: 1px solid #e5e5e5;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+        
+        .source-header {
+            background-color: #f0f0f0;
+            padding: 8px 12px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .source-content {
+            padding: 12px;
+            font-size: 0.9rem;
+            background-color: white;
+        }
+        
+        .title-container {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .title {
+            color: var(--primary-color);
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #6e6e80;
+        }
+        
+        .chat-footer {
+            border-top: 1px solid #e5e5e5;
+            padding: 1rem;
+            background-color: white;
+        }
+        
+        .chatbot .user {
+            background-color: var(--secondary-color) !important;
+        }
+        
+        .chatbot .assistant {
+            background-color: white !important;
+        }
+        
+        .slider-container {
+            margin: 10px 0;
+        }
         """
         
-        interface = gr.Interface(
-            fn=generate,
-            inputs=[
-                gr.Textbox(lines=4, placeholder="Enter your question here...", label="Question"),
-                gr.Slider(minimum=1, maximum=10, value=3, step=1, label="Number of sources to retrieve")
-            ],
-            outputs=[
-                gr.Textbox(lines=6, label="Answer", elem_classes=["response-box"]),
-                gr.Markdown(label="Retrieved Context", elem_classes=["context-box"])
-            ],
-            title="Veritas RAG",
-            description="Query your document collection with retrieval-augmented generation",
-            css=css,
-            elem_classes=["container"],
-            article="<div class='subtitle'>Powered by Mistral + FAISS vector search</div>"
-        )
+        with gr.Blocks(css=css) as demo:
+            # Header
+            with gr.Row(elem_classes=["title-container"]):
+                gr.HTML("<h1 class='title'>Veritas RAG</h1>")
+                gr.HTML("<p class='subtitle'>Powered by Mistral + FAISS vector search</p>")
+            
+            # Main content
+            with gr.Row(elem_classes=["container"]):
+                # Chat column
+                with gr.Column(elem_classes=["chat-container"]):
+                    chatbot = gr.Chatbot(elem_classes=["chatbot"])
+                    
+                    with gr.Row(elem_classes=["chat-footer"]):
+                        with gr.Column(scale=10):
+                            msg = gr.Textbox(
+                                placeholder="Ask a question about your documents...", 
+                                lines=2,
+                                show_label=False
+                            )
+                        with gr.Column(scale=1):
+                            submit_btn = gr.Button("Send", variant="primary")
+                    
+                    with gr.Accordion("Advanced Settings", open=False, elem_classes=["slider-container"]):
+                        top_k = gr.Slider(minimum=1, maximum=10, value=3, step=1, label="Number of sources to retrieve")
+                
+                # Context column
+                with gr.Column(elem_classes=["context-container"]):
+                    gr.HTML("<h3>Retrieved Sources</h3>")
+                    context_display = gr.HTML()
+            
+            # Define the submit event
+            def user_submit(message, history, top_k):
+                if not message.strip():
+                    return "", history, None
+                
+                # Add user message to history
+                history = history + [[message, None]]
+                
+                # Return empty message input, updated history, and empty context
+                return "", history, None
+            
+            # Handle the response generation separately
+            def respond(message, history, top_k):
+                # Get the last user message from history
+                last_message = history[-1][0]
+                
+                # Generate response
+                answer, context = generate(last_message, history, top_k)
+                
+                # Update history with the response
+                updated_history = history.copy()
+                updated_history[-1][1] = answer
+                
+                return updated_history, context
+            
+            # Set up the message submission flow - two steps
+            msg.submit(user_submit, [msg, chatbot, top_k], [msg, chatbot, context_display])
+            msg.submit(respond, [msg, chatbot, top_k], [chatbot, context_display])
+            
+            # Same for the button
+            submit_btn.click(user_submit, [msg, chatbot, top_k], [msg, chatbot, context_display])
+            submit_btn.click(respond, [msg, chatbot, top_k], [chatbot, context_display])
         
-        interface.launch(server_name=host, server_port=port)
+        # Launch the app
+        demo.launch(server_name=host, server_port=port)
 
 class StreamlitUI:
     """Streamlit-based user interface."""
