@@ -4,6 +4,7 @@ Script to examine the structure of chunked_data.json
 """
 
 import json
+import ijson
 import os
 from pathlib import Path
 import sys
@@ -30,35 +31,14 @@ def main():
             if data.strip().startswith('['):
                 print("File appears to be a JSON array")
                 
-                # Go back to beginning and load a few items
-                f.seek(0)
-                # Try to load first 5 items
+                # Use ijson to stream-load first 5 chunks
                 chunks = []
-                depth = 0
-                brackets = 0
-                chunk_data = ""
-                
-                # Read char by char looking for 5 complete JSON objects
-                for char in f.read(100000):  # Read a larger chunk to find complete objects
-                    chunk_data += char
-                    
-                    if char == '{':
-                        depth += 1
-                    elif char == '}':
-                        depth -= 1
-                        if depth == 0 and brackets > 0:
-                            # Found a complete object
-                            try:
-                                chunks.append(json.loads(chunk_data.strip().rstrip(',').strip()))
-                                chunk_data = ""
-                                if len(chunks) >= 5:
-                                    break
-                            except:
-                                chunk_data = ""
-                    elif char == '[' and depth == 0:
-                        brackets += 1
-                        chunk_data = ""
-                
+                with open(chunks_file, 'rb') as arr_f:
+                    for obj in ijson.items(arr_f, 'item'):
+                        chunks.append(obj)
+                        if len(chunks) >= 5:
+                            break
+
             # Check if it starts with an object
             elif data.strip().startswith('{'):
                 print("File appears to be a JSON object")
