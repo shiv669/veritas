@@ -11,17 +11,6 @@ Veritas is built on the **Mistral-2 7B** foundation model, enhanced with:
 - 100K+ token context windows through LongLoRA + positional interpolation
 - RAG (Retrieval-Augmented Generation) system for citation-backed reasoning
 
----
-
-## 🎉 Release Notes - Version 1.0
-We are excited to announce the release of Veritas 1.0, which includes:
-- Full RAG system implementation for citation-backed responses
-- Support for Mistral 2 7B model architecture
-- Enhanced retrieval capabilities for scientific literature
-- Improved chunking and indexing for better information retrieval
-
----
-
 ## Features
 
 ### Core Capabilities
