@@ -73,12 +73,17 @@ class RAGSystem:
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"Index path not found: {index_path}")
             
-        # Load chunks
-        chunks_path = os.path.join(index_path, "chunks.npy")
-        if os.path.exists(chunks_path):
-            self.chunks = np.load(chunks_path, allow_pickle=True).tolist()
+        # Load chunks (npy or fallback to JSON)
+        chunks_npy = os.path.join(index_path, "chunks.npy")
+        chunks_json = os.path.join(index_path, "chunks.json")
+        if os.path.exists(chunks_npy):
+            self.chunks = np.load(chunks_npy, allow_pickle=True).tolist()
+        elif os.path.exists(chunks_json):
+            import json
+            with open(chunks_json, 'r', encoding='utf-8') as f:
+                self.chunks = json.load(f)
         else:
-            logger.warning(f"Chunks file not found: {chunks_path}")
+            logger.warning(f"Chunks file not found (expected chunks.npy or chunks.json) in: {index_path}")
         
         # Load index
         index_file = os.path.join(index_path, "index.faiss")
