@@ -45,16 +45,40 @@ def process_json_file(input_file: str, output_dir: str, chunk_size: int = 1000, 
     output_path = os.path.join(output_dir, "chunked_data.json")
     print(f"Streaming and chunking entries from {input_file} to {output_path}...")
 
-    # Open input and output in streaming mode
-    with open(input_file, 'rb') as in_f, open(output_path, 'w', encoding='utf-8') as out_f:
+    # Detect JSON format (array vs JSON Lines)
+    is_json_array = False
+    with open(input_file, 'r', encoding='utf-8') as detect_f:
+        for ch in detect_f.read(1024):
+            if ch.isspace():
+                continue
+            if ch == '[':
+                is_json_array = True
+            break
+
+    # Open output and begin writing JSON array
+    with open(output_path, 'w', encoding='utf-8') as out_f:
         # Start JSON array
         out_f.write('[\n')
         first = True
 
-        # Stream through each entry in the JSON array
-        for idx, entry in enumerate(ijson.items(in_f, 'item')):
+        # Stream through entries
+        if is_json_array:
+            in_stream = open(input_file, 'rb')
+            entries = ijson.items(in_stream, 'item')
+        else:
+            # JSON Lines fallback
+            def entries_gen():
+                with open(input_file, 'r', encoding='utf-8') as text_f:
+                    for line in text_f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        yield json.loads(line)
+            entries = entries_gen()
+
+        for idx, entry in enumerate(entries):
             # Convert entry to string for chunking
-            entry_text = json.dumps(entry, ensure_ascii=False)
+            entry_text = json.dumps(entry, ensure_ascii=False, default=str)
             # Create chunks
             chunks = create_chunks(entry_text, chunk_size, overlap)
 
@@ -79,7 +103,8 @@ def process_json_file(input_file: str, output_dir: str, chunk_size: int = 1000, 
     print(f"Created {idx+1} entries worth of chunks into {output_path}")
 
 if __name__ == "__main__":
-    input_file = os.path.join(Config.INPUT_DIR, "1.json")
+    # Use processed JSON file as input
+    input_file = os.path.join(Config.DATA_DIR, "processed", "1.json")
     output_dir = Config.CHUNKS_DIR
     chunk_size = Config.DEFAULT_CHUNK_SIZE
     overlap = Config.DEFAULT_CHUNK_OVERLAP
