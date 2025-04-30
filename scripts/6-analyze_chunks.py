@@ -81,6 +81,8 @@ def main():
     
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
+    # Ensure docs directory exists for saving plots
+    os.makedirs(Config.DOCS_DIR, exist_ok=True)
     
     # Load and analyze chunks
     logger.info(f"Loading chunks from {chunks_file}")
