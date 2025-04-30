@@ -8,6 +8,7 @@ Run Mistral model with support for different UI frameworks and deployment option
 import json
 import logging
 from pathlib import Path
+import os
 from typing import Dict, List, Optional, Union, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -15,20 +16,17 @@ import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from veritas.config import (
-    MODELS_DIR, LOGS_DIR,
-    DEFAULT_GEN_MODEL, MAX_NEW_TOKENS,
-    TEMPERATURE
-)
+# Get the absolute path to the project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+from src.veritas.config import Config, get_device
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOGS_DIR / "mistral.log"),
+        logging.FileHandler(os.path.join(Config.LOGS_DIR, "mistral.log")),
         logging.StreamHandler()
     ]
 )
@@ -50,14 +48,14 @@ class DeploymentMode(Enum):
 @dataclass
 class ModelConfig:
     """Configuration for Mistral model."""
-    model_name: str = DEFAULT_GEN_MODEL
-    max_new_tokens: int = MAX_NEW_TOKENS
-    temperature: float = TEMPERATURE
+    model_name: str = Config.LLM_MODEL
+    max_new_tokens: int = 1024  # Default max tokens to generate
+    temperature: float = 0.7    # Default temperature
     top_p: float = 0.9
     top_k: int = 50
     repetition_penalty: float = 1.1
     do_sample: bool = True
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    device: str = get_device()
 
 class MistralModel:
     """Wrapper for Mistral model."""
@@ -266,7 +264,7 @@ if __name__ == "__main__":
                       default=DeploymentMode.LOCAL.value,
                       help="Deployment mode")
     parser.add_argument("--model-name", type=str,
-                      default=DEFAULT_GEN_MODEL,
+                      default=Config.LLM_MODEL,
                       help="Name of the model to use")
     parser.add_argument("--host", type=str,
                       default="0.0.0.0",
