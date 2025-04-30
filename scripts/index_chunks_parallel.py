@@ -610,8 +610,10 @@ def process_chunk(chunk: Dict[str, Any], rag: RAGSystem, output_dir: Path) -> Op
         Processed chunk metadata if successful, None otherwise
     """
     try:
-        # Extract text and metadata
-        text = chunk.get('text', '')
+        # Support 'text' or fallback to 'content'
+        text = chunk.get('text', None)
+        if text is None:
+            text = chunk.get('content', '')
         metadata = chunk.get('metadata', {})
         chunk_index = metadata.get('chunk_index', 0)
         
@@ -650,23 +652,23 @@ def main():
         # Initialize RAG system
         rag = RAGSystem()
         
-        # Create output and backup directories
-        output_dir = Path("output/chunks")
-        backup_dir = Path("output/metadata_backups")
+        # Create indices and backup directories
+        output_dir = Path(Config.INDICES_DIR)
+        backup_dir = output_dir / "metadata_backups"
         output_dir.mkdir(parents=True, exist_ok=True)
         backup_dir.mkdir(parents=True, exist_ok=True)
         
-        # Load chunks from input file
-        input_file = Path("input/chunks.json")
+        # Load chunks from chunked_data.json
+        input_file = Path(Config.CHUNKS_DIR) / "chunked_data.json"
         if not input_file.exists():
-            logger.error(f"Input file not found: {input_file}")
+            logger.error(f"Chunks file not found: {input_file}")
             return
-            
-        with open(input_file) as f:
+        
+        with open(input_file, 'r', encoding='utf-8') as f:
             chunks = json.load(f)
-            
+        
         if not chunks:
-            logger.error("No chunks found in input file")
+            logger.error("No chunks found in chunked_data.json")
             return
             
         # Group chunks for parallel processing
