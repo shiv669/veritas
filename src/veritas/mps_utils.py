@@ -1,5 +1,12 @@
 """
 MPS (Metal Performance Shaders) utilities for Apple Silicon
+
+What this file does:
+This file makes Veritas run faster on Apple's M-series chips (M1, M2, M3, M4).
+It's like a special set of instructions that lets the AI take advantage of
+the powerful graphics capabilities in Apple Silicon computers.
+
+Without this, the system would still work but would run much slower.
 """
 import torch
 import logging
@@ -10,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 def is_mps_available() -> bool:
     """
-    Check if MPS is available on this system.
+    Checks if your Mac has Apple Silicon and can use these special optimizations
     
     Returns:
-        True if MPS is available, False otherwise
+    - True if you have an M-series Mac that can use these speed boosts
+    - False if you have an older Mac or a PC
     """
     try:
         if not torch.backends.mps.is_available():
@@ -29,13 +37,16 @@ def is_mps_available() -> bool:
 
 def set_mps_memory_limit(memory_limit_mb: int) -> bool:
     """
-    Set MPS memory limit in MB.
+    Controls how much memory the AI can use on your Mac
     
-    Args:
-        memory_limit_mb: Memory limit in MB
-        
+    This is like telling the AI how much of your computer's RAM it's allowed to use.
+    Setting this properly prevents crashes and out-of-memory errors.
+    
+    Parameters:
+    - memory_limit_mb: Maximum RAM the AI can use (in megabytes)
+    
     Returns:
-        True if successful, False otherwise
+    - True if the setting was applied successfully
     """
     try:
         # Check if torch version supports this feature

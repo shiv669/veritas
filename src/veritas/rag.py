@@ -1,5 +1,12 @@
 """
 RAG (Retrieval-Augmented Generation) implementation for Veritas
+
+What this file does:
+This is the heart of Veritas - it lets the AI answer questions by:
+1. Finding relevant information in your documents (Retrieval)
+2. Using that information to generate accurate answers (Generation)
+
+Think of it like giving the AI the ability to "look things up" before answering!
 """
 import os
 import torch
@@ -14,7 +21,14 @@ from .utils import setup_logging
 logger = setup_logging(__name__)
 
 class RAGSystem:
-    """Retrieval-Augmented Generation system implementation"""
+    """
+    The main RAG system that combines retrieval and generation
+    
+    What it does:
+    - Finds relevant chunks of text from your documents
+    - Feeds those chunks to the AI to generate accurate answers
+    - Keeps track of where information came from for citations
+    """
     
     def __init__(self, 
                  embedding_model: str = None,
@@ -22,13 +36,13 @@ class RAGSystem:
                  index_path: str = None,
                  device: str = None):
         """
-        Initialize RAG system with specified models and index
+        Sets up the RAG system with all needed components
         
-        Args:
-            embedding_model: Path or name of embedding model
-            llm_model: Path or name of language model
-            index_path: Path to FAISS index
-            device: Device to use for computation ('cuda', 'mps', or 'cpu')
+        Parameters:
+        - embedding_model: Model that converts text to numbers (vectors)
+        - llm_model: The AI model that generates answers (Mistral 2 7B)
+        - index_path: Where your document index is stored
+        - device: What hardware to use (GPU, Apple Silicon, or CPU)
         """
         self.device = device or get_device()
         logger.info(f"Using device: {self.device}")

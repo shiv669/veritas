@@ -5,6 +5,19 @@ index_chunks_parallel.py
 Script to index the processed chunks into the RAG system.
 This script loads the chunks from data/chunks.json and builds a FAISS index.
 Optimized for M4 Max with Apple Silicon, 120GB RAM, and 8TB storage.
+
+What this file does:
+This is a supercharged version of the indexing process that can handle HUGE 
+document collections by spreading the work across multiple CPU cores. 
+
+Think of it like having a team of workers organizing a massive library 
+instead of just one person - it's much faster for large collections.
+This is especially useful if you have:
+1. Thousands of documents
+2. A computer with multiple CPU cores
+3. Lots of RAM memory
+
+For smaller document collections, the regular indexing script is fine.
 """
 
 import json
@@ -99,14 +112,20 @@ def validate_metadata(metadata: Dict[str, Any]) -> bool:
 
 def process_chunk(chunk: Dict[str, Any], embedding_model: SentenceTransformer) -> Dict[str, Any]:
     """
-    Process a single chunk by computing its embedding.
+    Processes a single chunk of text
     
-    Args:
-        chunk: Chunk dictionary
-        embedding_model: SentenceTransformer model
-        
+    This function takes a piece of text, converts it to numbers the AI can understand,
+    and prepares it for the search index.
+    
+    It's like taking a single page of a book and creating a special digital version
+    that the AI can quickly search.
+    
+    Parameters:
+    - chunk: A piece of text from your documents
+    - embedding_model: The tool that converts text to numbers
+    
     Returns:
-        Dictionary with chunk data and embedding
+    - The processed chunk ready for indexing
     """
     try:
         # Get the text, checking both 'text' and 'content' fields

@@ -1,5 +1,11 @@
 """
 Main configuration settings for Veritas RAG system
+
+What this file does:
+This is the control center for Veritas. It sets up all the important settings
+like where files are stored, what models to use, and how to process documents.
+
+Think of it as the "settings menu" for the whole system.
 """
 import os
 import torch
@@ -7,7 +13,10 @@ import platform
 
 class Config:
     """
-    Configuration settings for the Veritas RAG system
+    Settings that control how Veritas works
+    
+    This class keeps all settings in one place so they're easy to find and change.
+    You can think of it like the control panel for the whole system.
     """
     # Paths
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,16 +34,16 @@ class Config:
     INDICES_DIR = os.path.join(DATA_DIR, "indices")
     
     # Model settings
-    EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-    LLM_MODEL = os.path.join(MODELS_DIR, "mistral-7b")
+    EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Converts text to vectors
+    LLM_MODEL = os.path.join(MODELS_DIR, "mistral-7b")  # The AI that generates answers
     
     # Chunking settings
-    DEFAULT_CHUNK_SIZE = 512
-    DEFAULT_CHUNK_OVERLAP = 128
+    DEFAULT_CHUNK_SIZE = 512  # How many words in each text chunk
+    DEFAULT_CHUNK_OVERLAP = 128  # How much chunks overlap to avoid splitting ideas
     
     # Retrieval settings
-    TOP_K = 5
-    SIMILARITY_THRESHOLD = 0.6
+    TOP_K = 5  # How many relevant chunks to retrieve for each question
+    SIMILARITY_THRESHOLD = 0.6  # How similar a chunk must be to be considered relevant
     
     @classmethod
     def ensure_dirs(cls):

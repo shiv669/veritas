@@ -1,5 +1,10 @@
 """
 Utility functions for the Veritas RAG system
+
+What this file does:
+This file contains helpful tools used throughout the Veritas system.
+Think of it like a toolbox with various useful gadgets that other parts
+of the system can use when needed.
 """
 import os
 import time
@@ -9,14 +14,18 @@ from .config import Config
 
 def setup_logging(name: str, level: int = logging.INFO) -> logging.Logger:
     """
-    Set up logging for a module
+    Creates a system for recording what happens while Veritas runs
     
-    Args:
-        name: Logger name
-        level: Logging level
-        
+    This is like setting up a diary that Veritas writes in to keep track
+    of what it's doing. If something goes wrong, you can read this diary
+    to figure out what happened.
+    
+    Parameters:
+    - name: What part of the system is writing the log
+    - level: How detailed the log should be
+    
     Returns:
-        Configured logger
+    - A configured logger ready to record information
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -48,14 +57,19 @@ def setup_logging(name: str, level: int = logging.INFO) -> logging.Logger:
 
 
 class Timer:
-    """Simple timer for performance measurement"""
+    """
+    Keeps track of how long things take to run
+    
+    This is like a stopwatch that helps measure performance and
+    identify parts of the system that might be running slowly.
+    """
     
     def __init__(self, name: Optional[str] = None):
         """
-        Initialize timer
+        Sets up a new timer
         
-        Args:
-            name: Optional name for the timer
+        Parameters:
+        - name: What you're timing (e.g., "Loading Model" or "Searching Documents")
         """
         self.name = name or "Timer"
         self.start_time = None

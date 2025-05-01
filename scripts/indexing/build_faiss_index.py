@@ -2,13 +2,22 @@
 """
 build_faiss_index.py
 
-Build FAISS index with support for different index types and embedding models.
+Builds a FAISS index for fast semantic search of document chunks.
+
+What this file does:
+This script creates a special search index that helps the AI quickly find 
+relevant information in your documents. It's like creating a detailed table 
+of contents or index for a book, but instead of just keywords, it can find 
+content based on meaning and concepts.
+
+After running this script, the AI will be able to instantly find relevant 
+information to answer questions, even if you have thousands of documents.
 """
 
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 import numpy as np
 from tqdm import tqdm
 import faiss

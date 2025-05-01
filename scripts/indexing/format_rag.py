@@ -3,6 +3,15 @@
 format_rag.py
 
 Format documents for RAG with support for different input formats and chunking strategies.
+
+What this file does:
+This script prepares your documents so they can be searched by the AI.
+It's like an automated librarian that:
+1. Takes your documents (PDFs, text files, etc.)
+2. Breaks them into manageable pieces
+3. Organizes them so the AI can quickly find relevant information
+
+You run this before using Veritas to get your documents ready for searching.
 """
 
 import json
@@ -34,7 +43,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class InputFormat(Enum):
-    """Supported input formats."""
+    """
+    Supported file types that Veritas can process
+    
+    This tells the system what kind of documents you're feeding it.
+    """
     JSON = "json"
     TXT = "txt"
     PDF = "pdf"
@@ -42,7 +55,15 @@ class InputFormat(Enum):
     HTML = "html"
 
 class ChunkingStrategy(Enum):
-    """Available chunking strategies."""
+    """
+    Different ways to split your documents into chunks
+    
+    Think of these like different ways to divide a book:
+    - FIXED: Split every X words
+    - SENTENCE: Split at the end of sentences
+    - PARAGRAPH: Split at paragraph breaks
+    - SEMANTIC: Try to keep related concepts together
+    """
     FIXED = "fixed"  # Fixed-size chunks
     SENTENCE = "sentence"  # Sentence-based chunks
     PARAGRAPH = "paragraph"  # Paragraph-based chunks

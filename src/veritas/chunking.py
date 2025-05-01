@@ -1,5 +1,10 @@
 """
 Text chunking utilities for the Veritas RAG system
+
+What this file does:
+This breaks down long documents into smaller pieces (chunks) that the AI can work with.
+Think of it like cutting a large book into pages - the AI can read a few pages at a time,
+not the whole book at once.
 """
 import re
 import nltk
@@ -14,14 +19,17 @@ except LookupError:
 
 def get_chunk_size(text_length: int, target_chunks: int = 10) -> int:
     """
-    Calculate an appropriate chunk size based on text length and target number of chunks
+    Figures out how big each chunk should be based on your document size
     
-    Args:
-        text_length: Length of the text in characters
-        target_chunks: Target number of chunks
-        
+    This is like deciding how many pages to put in each chapter of a book
+    based on how long the book is.
+    
+    Parameters:
+    - text_length: How long your document is
+    - target_chunks: How many chunks you want to create
+    
     Returns:
-        Recommended chunk size
+    - The recommended size for each chunk
     """
     if text_length <= 0:
         return Config.DEFAULT_CHUNK_SIZE
