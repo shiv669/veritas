@@ -88,19 +88,10 @@ def should_clear_memory():
     return psutil.virtual_memory().available < (MEMORY_THRESHOLD * 0.2)
 
 def clear_memory():
-    """Aggressively clear memory."""
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    elif torch.backends.mps.is_available():
-        torch.mps.empty_cache()
-    for obj in gc.get_objects():
-        try:
-            if torch.is_tensor(obj):
-                del obj
-        except:
-            pass
-    gc.collect()
+    """Aggressively clear memory, optimized for Apple Silicon."""
+    # Import clear_memory from mps_utils to use the centralized implementation
+    from src.veritas.mps_utils import clear_memory as mps_clear_memory
+    mps_clear_memory()
 
 def validate_metadata(metadata: Dict[str, Any]) -> bool:
     """Validate that required metadata fields are present."""
@@ -261,7 +252,7 @@ def main():
         optimize_memory_for_m4()
         logger.info(f"Initial memory usage: {get_memory_usage():.2f} GB")
         
-        # Choose the appropriate device
+        # Choose the appropriate device (MPS for Apple Silicon or CPU)
         device = args.device
         if device is None:
             device = "mps" if is_mps_available() else "cpu"
@@ -270,7 +261,11 @@ def main():
         # Load the embedding model
         embedding_model_name = Config.EMBEDDING_MODEL
         logger.info(f"Loading embedding model: {embedding_model_name}")
-        embedding_model = SentenceTransformer(embedding_model_name, device=device)
+        embedding_model = SentenceTransformer(
+            embedding_model_name, 
+            device=device,
+            cache_folder=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
+        )
         
         if device == "mps":
             # Optimize for MPS

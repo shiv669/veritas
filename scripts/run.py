@@ -277,8 +277,8 @@ Answer:"""
             # Force memory cleanup on error
             if self.config.device == "mps":
                 clear_mps_cache()
-            elif self.config.device == "cuda":
-                torch.cuda.empty_cache()
+            
+            # Let the exception propagate
             raise
 
 class TerminalUI:

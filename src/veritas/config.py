@@ -106,11 +106,16 @@ class Config:
 def get_device():
     """
     Determine the best available device for computations
-    Returns 'cuda', 'mps', or 'cpu' based on availability
+    
+    This version focuses exclusively on Apple Silicon (MPS) support
+    with fallback to CPU if MPS is not available.
+    
+    Returns:
+        'mps' if Apple Silicon is available, otherwise 'cpu'
     """
-    if torch.cuda.is_available():
-        return "cuda"
-    elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+    if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        logger.info("Using MPS (Apple Silicon) for computation")
         return "mps"
     else:
+        logger.info("MPS not available, using CPU for computation")
         return "cpu" 

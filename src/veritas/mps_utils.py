@@ -11,6 +11,7 @@ Without this, the system would still work but would run much slower.
 import torch
 import logging
 import os
+import gc
 from typing import Any, Dict, Optional
 from .config import Config
 
@@ -125,6 +126,32 @@ def clear_mps_cache() -> None:
             logger.info("Cleared MPS cache")
         except Exception as e:
             logger.warning(f"Failed to clear MPS cache: {e}")
+
+def clear_memory() -> None:
+    """
+    Aggressively clear memory, optimized for Apple Silicon
+    
+    This function performs comprehensive memory cleanup,
+    focusing on Apple Silicon but also generally useful.
+    """
+    # Always collect garbage first
+    gc.collect()
+    
+    # Clear MPS cache if available
+    if is_mps_available():
+        clear_mps_cache()
+    
+    # More aggressive tensor cleanup
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj):
+                del obj
+        except:
+            pass
+    
+    # Final garbage collection
+    gc.collect()
+    logger.info("Aggressively cleared memory")
 
 def optimize_memory_for_m4() -> None:
     """
