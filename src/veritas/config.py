@@ -1,11 +1,32 @@
 """
 Main configuration settings for Veritas RAG system
 
-What this file does:
-This is the control center for Veritas. It sets up all the important settings
-like where files are stored, what models to use, and how to process documents.
+This module defines the global configuration settings for the Veritas Retrieval-Augmented 
+Generation (RAG) system. It centralizes all parameters in a single location to improve 
+maintainability and make system-wide changes easier to implement.
 
-Think of it as the "settings menu" for the whole system.
+Features:
+- Centralized configuration via the Config class
+- Dynamic path configurations for file storage
+- Model selection parameters
+- Performance optimization settings for Apple Silicon
+- Environment variable management
+- Device selection utilities
+
+Usage examples:
+    from veritas.config import Config, get_device
+    
+    # Access a configuration parameter
+    models_dir = Config.MODELS_DIR
+    
+    # Create necessary directories
+    Config.ensure_dirs()
+    
+    # Set up optimized environment variables
+    Config.setup_environment()
+    
+    # Get the best available computation device
+    device = get_device()
 """
 import os
 import torch
@@ -16,10 +37,33 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """
-    Settings that control how Veritas works
+    Centralized configuration class for the Veritas RAG system.
     
-    This class keeps all settings in one place so they're easy to find and change.
-    You can think of it like the control panel for the whole system.
+    This class provides a single point of control for all system settings
+    and parameters. It includes file paths, model configurations, chunking
+    parameters, and performance optimization settings.
+    
+    Attributes:
+        BASE_DIR (str): The root directory of the project
+        DATA_DIR (str): Directory for storing data files
+        MODELS_DIR (str): Directory for storing model files
+        LOGS_DIR (str): Directory for storing log files
+        SCRIPTS_DIR (str): Directory for storing script files
+        TESTS_DIR (str): Directory for storing test files
+        DOCS_DIR (str): Directory for storing documentation
+        INPUT_DIR (str): Directory for input files requiring processing
+        OUTPUT_DIR (str): Directory for processed output files
+        CHUNKS_DIR (str): Directory for storing text chunks
+        INDICES_DIR (str): Directory for storing FAISS indices
+        TEMP_DIR (str): Temporary directory for intermediate files (on SSD)
+        EMBEDDING_MODEL (str): Path or name of the embedding model
+        LLM_MODEL (str): Path or name of the language model
+        DEFAULT_CHUNK_SIZE (int): Default size for text chunks (in words)
+        DEFAULT_CHUNK_OVERLAP (int): Default overlap between chunks (in words)
+        TOP_K (int): Number of chunks to retrieve for each query
+        SIMILARITY_THRESHOLD (float): Minimum similarity for relevant chunks
+        CPU_THREADS (int): Number of CPU threads to use
+        MEMORY_LIMIT_GB (int): Maximum memory limit in gigabytes
     """
     # Paths
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

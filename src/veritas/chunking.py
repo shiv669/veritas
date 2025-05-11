@@ -1,10 +1,27 @@
 """
 Text chunking utilities for the Veritas RAG system
 
-What this file does:
-This breaks down long documents into smaller pieces (chunks) that the AI can work with.
-Think of it like cutting a large book into pages - the AI can read a few pages at a time,
-not the whole book at once.
+This module provides functionality for dividing large documents into smaller,
+semantically meaningful chunks that can be processed efficiently by the RAG system.
+Effective chunking is crucial for retrieval accuracy and model performance.
+
+Features:
+- Automatic chunk size determination
+- Intelligent text segmentation
+- Sentence-aware chunking
+- Overlap control for context preservation
+
+Usage examples:
+    from veritas.chunking import chunk_text, get_chunk_size
+    
+    # Determine optimal chunk size for a document
+    optimal_size = get_chunk_size(len(document_text))
+    
+    # Split document into chunks with default settings
+    chunks = chunk_text(document_text)
+    
+    # Split with custom parameters
+    chunks = chunk_text(document_text, chunk_size=500, overlap=100)
 """
 import re
 import nltk
@@ -19,17 +36,23 @@ except LookupError:
 
 def get_chunk_size(text_length: int, target_chunks: int = 10) -> int:
     """
-    Figures out how big each chunk should be based on your document size
+    Calculate optimal chunk size based on document length and target number of chunks.
     
-    This is like deciding how many pages to put in each chapter of a book
-    based on how long the book is.
+    This function dynamically determines an appropriate chunk size by dividing
+    the total text length by the desired number of chunks, with constraints to
+    ensure chunks are neither too small nor too large.
     
-    Parameters:
-    - text_length: How long your document is
-    - target_chunks: How many chunks you want to create
-    
+    Args:
+        text_length: Total length of the document in characters
+        target_chunks: Desired number of chunks to produce
+        
     Returns:
-    - The recommended size for each chunk
+        int: Recommended chunk size in characters
+        
+    Example:
+        document_length = len(large_document)
+        chunk_size = get_chunk_size(document_length, target_chunks=15)
+        chunks = chunk_text(large_document, chunk_size=chunk_size)
     """
     if text_length <= 0:
         return Config.DEFAULT_CHUNK_SIZE
@@ -47,15 +70,28 @@ def get_chunk_size(text_length: int, target_chunks: int = 10) -> int:
 
 def chunk_text(text: str, chunk_size: int = None, overlap: int = None) -> List[str]:
     """
-    Split text into chunks of specified size with overlap
+    Split text into semantically meaningful chunks with controlled overlap.
+    
+    This function segments text into chunks by respecting sentence boundaries
+    where possible, and handles special cases like very long sentences by
+    breaking them at punctuation or word boundaries. The overlap parameter
+    helps maintain context between adjacent chunks.
     
     Args:
-        text: Text to chunk
-        chunk_size: Size of each chunk in characters
-        overlap: Number of characters to overlap between chunks
+        text: The text content to be chunked
+        chunk_size: Maximum size of each chunk in characters (default from Config)
+        overlap: Number of characters to overlap between chunks (default from Config)
         
     Returns:
-        List of text chunks
+        List[str]: List of text chunks ready for embedding and indexing
+        
+    Example:
+        document = "This is a long document that needs to be split..."
+        chunks = chunk_text(document, chunk_size=500, overlap=50)
+        
+        # Process each chunk
+        for i, chunk in enumerate(chunks):
+            print(f"Chunk {i}: {chunk[:50]}...")
     """
     if not text or not text.strip():
         return []

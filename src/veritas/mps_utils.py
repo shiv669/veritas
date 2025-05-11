@@ -1,12 +1,28 @@
 """
 MPS (Metal Performance Shaders) utilities for Apple Silicon
 
-What this file does:
-This file makes Veritas run faster on Apple's M-series chips (M1, M2, M3, M4).
-It's like a special set of instructions that lets the AI take advantage of
-the powerful graphics capabilities in Apple Silicon computers.
+This module provides specialized optimization functions for running the Veritas
+RAG system on Apple Silicon hardware (M1, M2, M3, M4 chips). It improves performance
+by leveraging Metal Performance Shaders (MPS) and implementing Mac-specific
+memory management strategies.
 
-Without this, the system would still work but would run much slower.
+Features:
+- MPS availability detection
+- Memory management optimizations
+- Cache clearing utilities
+- Model optimization for Apple Silicon
+- M4 Mac-specific configurations
+
+Usage examples:
+    from veritas.mps_utils import is_mps_available, clear_mps_cache, optimize_for_mps
+    
+    # Check if MPS is available
+    if is_mps_available():
+        # Apply optimizations to model
+        model = optimize_for_mps(model)
+        
+    # Clear cache after heavy operations
+    clear_mps_cache()
 """
 import torch
 import logging
@@ -19,11 +35,20 @@ logger = logging.getLogger(__name__)
 
 def is_mps_available() -> bool:
     """
-    Checks if your Mac has Apple Silicon and can use these special optimizations
+    Check if Metal Performance Shaders (MPS) are available on the current device.
+    
+    This function verifies that the current system supports Apple's MPS backend
+    for PyTorch by checking the torch.backends.mps availability and attempting
+    to create a test tensor on the MPS device.
     
     Returns:
-    - True if you have an M-series Mac that can use these speed boosts
-    - False if you have an older Mac or a PC
+        bool: True if MPS is available and functional, False otherwise
+        
+    Example:
+        if is_mps_available():
+            device = "mps"
+        else:
+            device = "cpu"
     """
     try:
         if not torch.backends.mps.is_available():
@@ -39,16 +64,21 @@ def is_mps_available() -> bool:
 
 def set_mps_memory_limit(memory_limit_mb: int) -> bool:
     """
-    Controls how much memory the AI can use on your Mac
+    Set the memory limit for MPS (Metal Performance Shaders) operations.
     
-    This is like telling the AI how much of your computer's RAM it's allowed to use.
-    Setting this properly prevents crashes and out-of-memory errors.
+    This function controls the maximum amount of memory that PyTorch can allocate
+    on the Apple Silicon GPU. It uses either the native PyTorch API or environment
+    variables depending on the PyTorch version.
     
-    Parameters:
-    - memory_limit_mb: Maximum RAM the AI can use (in megabytes)
-    
+    Args:
+        memory_limit_mb: Maximum memory in megabytes to allocate for MPS operations
+        
     Returns:
-    - True if the setting was applied successfully
+        bool: True if the limit was successfully set, False otherwise
+        
+    Example:
+        # Limit MPS memory to 16GB
+        set_mps_memory_limit(16 * 1024)
     """
     try:
         # Check if torch version supports this feature
@@ -71,17 +101,21 @@ def set_mps_memory_limit(memory_limit_mb: int) -> bool:
 
 def optimize_for_mps(obj: Any) -> Any:
     """
-    Apply MPS-specific optimizations to an object
+    Apply Apple Silicon-specific optimizations to a model or other PyTorch object.
     
-    This function handles runtime operations like converting models to
-    half precision and moving them to the MPS device. These are operations
-    that need to happen during execution, not just configuration settings.
+    This function applies various optimizations to make models run efficiently on 
+    Apple Silicon hardware, including converting to half precision and moving tensors 
+    to the MPS device.
     
     Args:
-        obj: Object to optimize (typically a model)
+        obj: The object to optimize (typically a model instance or RAG system)
         
     Returns:
-        Optimized object
+        The optimized object with MPS-specific enhancements
+        
+    Example:
+        model = AutoModelForCausalLM.from_pretrained("mistral-7b")
+        model = optimize_for_mps(model)
     """
     try:
         if hasattr(obj, 'model') and hasattr(obj.model, 'half'):
@@ -115,10 +149,16 @@ def optimize_for_mps(obj: Any) -> Any:
 
 def clear_mps_cache() -> None:
     """
-    Clear MPS memory cache to free up resources
+    Clear the MPS device memory cache to free up GPU resources.
     
-    This is a runtime operation that should be called when memory
-    usage gets high during model execution.
+    This function should be called periodically during processing to prevent
+    memory buildup on the Apple Silicon GPU, especially after large operations
+    or when memory warnings occur.
+    
+    Example:
+        # After generating text with a large model
+        result = model.generate(inputs)
+        clear_mps_cache()  # Free up GPU memory
     """
     if is_mps_available():
         try:
@@ -129,10 +169,15 @@ def clear_mps_cache() -> None:
 
 def clear_memory() -> None:
     """
-    Aggressively clear memory, optimized for Apple Silicon
+    Perform comprehensive memory cleanup across both CPU and GPU resources.
     
-    This function performs comprehensive memory cleanup,
-    focusing on Apple Silicon but also generally useful.
+    This function combines Python garbage collection with MPS-specific cleanup
+    to maximize available memory after resource-intensive operations.
+    
+    Example:
+        # After completing a batch of operations
+        process_large_documents()
+        clear_memory()  # Thorough cleanup of all resources
     """
     # Always collect garbage first
     gc.collect()
@@ -155,10 +200,16 @@ def clear_memory() -> None:
 
 def optimize_memory_for_m4() -> None:
     """
-    Apply memory optimizations for M4 Mac
+    Apply comprehensive memory optimizations specifically tuned for M4 Macs.
     
-    This function coordinates both environment settings (via Config)
-    and runtime operations for optimal M4 performance.
+    This function configures both environment variables and runtime settings
+    to maximize performance on M4 Mac hardware with 128GB RAM. It should be
+    called at application startup.
+    
+    Example:
+        # At the beginning of your application
+        optimize_memory_for_m4()
+        load_models()
     """
     # Apply environment variable settings using centralized Config
     if is_mps_available():
