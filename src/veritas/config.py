@@ -31,7 +31,7 @@ class Config:
     INPUT_DIR = os.path.join(DATA_DIR, "input")
     OUTPUT_DIR = os.path.join(DATA_DIR, "output")
     CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
-    INDICES_DIR = os.path.join(DATA_DIR, "indices")
+    INDICES_DIR = os.path.join(MODELS_DIR, "faiss")
     
     # Model settings
     EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Converts text to vectors

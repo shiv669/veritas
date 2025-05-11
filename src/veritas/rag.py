@@ -88,8 +88,8 @@ class RAGSystem:
             raise FileNotFoundError(f"Index path not found: {index_path}")
             
         # Load chunks (npy or fallback to JSON)
-        chunks_npy = os.path.join(index_path, "chunks.npy")
-        chunks_json = os.path.join(index_path, "chunks.json")
+        chunks_npy = os.path.join(os.path.dirname(index_path), "chunks.npy")
+        chunks_json = os.path.join(os.path.dirname(index_path), "chunks.json")
         if os.path.exists(chunks_npy):
             self.chunks = np.load(chunks_npy, allow_pickle=True).tolist()
         elif os.path.exists(chunks_json):
@@ -100,7 +100,7 @@ class RAGSystem:
             logger.warning(f"Chunks file not found (expected chunks.npy or chunks.json) in: {index_path}")
         
         # Load index
-        index_file = os.path.join(index_path, "index.faiss")
+        index_file = os.path.join(os.path.dirname(index_path), "index.faiss")
         if os.path.exists(index_file):
             self.index = faiss.read_index(index_file)
         else:
@@ -145,16 +145,23 @@ class RAGSystem:
         results = []
         for score, idx in zip(scores[0], indices[0]):
             if idx >= 0 and idx < len(self.chunks):
+                chunk = self.chunks[idx]
+                # Handle different chunk formats
+                if isinstance(chunk, dict):
+                    text = chunk.get('text', str(chunk))
+                else:
+                    text = str(chunk)
+                
                 results.append({
                     "score": float(score),
-                    "chunk": self.chunks[idx],
+                    "chunk": text,
                     "index": int(idx)
                 })
         
         return results
     
     def generate(self, prompt: str, 
-                 max_length: int = 2048, 
+                 max_new_tokens: int = 512, 
                  temperature: float = 0.7,
                  top_p: float = 0.9) -> str:
         """
@@ -162,7 +169,7 @@ class RAGSystem:
         
         Args:
             prompt: Input prompt for generation
-            max_length: Maximum length of generated text
+            max_new_tokens: Maximum number of new tokens to generate
             temperature: Sampling temperature
             top_p: Nucleus sampling parameter
             
@@ -171,7 +178,7 @@ class RAGSystem:
         """
         result = self.generator(
             prompt,
-            max_length=max_length,
+            max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
             num_return_sequences=1
@@ -195,7 +202,7 @@ def query_rag(query: str, rag_system: RAGSystem = None, top_k: int = 5) -> Dict[
     # Create RAG system if not provided
     if rag_system is None:
         logger.info("Creating new RAG system")
-        index_path = os.path.join(Config.INDICES_DIR, "latest")
+        index_path = os.path.join(Config.MODELS_DIR, "faiss", "index.faiss")
         rag_system = RAGSystem(index_path=index_path)
     
     # Retrieve relevant chunks

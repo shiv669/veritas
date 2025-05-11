@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class UIFramework(Enum):
     """Supported UI frameworks."""
+    TERMINAL = "terminal"
     STREAMLIT = "streamlit"
     FLASK = "flask"
     FASTAPI = "fastapi"
@@ -49,8 +50,8 @@ class DeploymentMode(Enum):
 class ModelConfig:
     """Configuration for Mistral model."""
     model_name: str = Config.LLM_MODEL
-    max_new_tokens: int = 1024  # Default max tokens to generate
-    temperature: float = 0.7    # Default temperature
+    max_new_tokens: int = 512  # Reduced from 1024 to get more concise responses
+    temperature: float = 0.3    # Reduced from 0.7 to get more focused responses
     top_p: float = 0.9
     top_k: int = 50
     repetition_penalty: float = 1.1
@@ -175,6 +176,52 @@ class FastAPI:
         
         uvicorn.run(app, host=host, port=port)
 
+class TerminalUI:
+    """Simple terminal-based user interface."""
+    
+    def __init__(self, model: MistralModel):
+        self.model = model
+        # Initialize RAG system
+        from src.veritas.rag import RAGSystem
+        index_path = os.path.join(Config.MODELS_DIR, "faiss", "index.faiss")
+        self.rag_system = RAGSystem(index_path=index_path)
+    
+    def run(self, host: str = "0.0.0.0", port: int = None):
+        """Run the terminal interface."""
+        print("\nWelcome to Mistral Chat!")
+        print("Type 'exit' or 'quit' to end the session.\n")
+        
+        while True:
+            try:
+                prompt = input("\nEnter your prompt: ")
+                if prompt.lower() in ['exit', 'quit']:
+                    print("\nGoodbye!")
+                    break
+                
+                if prompt.strip():
+                    print("\nRetrieving relevant context...")
+                    # Get RAG results
+                    result = query_rag(prompt, self.rag_system)
+                    
+                    # Show retrieved chunks
+                    print("\nRetrieved Context:")
+                    print("-" * 50)
+                    for i, chunk in enumerate(result["retrieved_chunks"], 1):
+                        print(f"\nChunk {i} (Score: {chunk['score']:.4f}):")
+                        print(chunk["chunk"])
+                        print("-" * 50)
+                    
+                    # Show answer
+                    print("\nAnswer:")
+                    print(result["answer"])
+                else:
+                    print("Please enter a prompt.")
+            except KeyboardInterrupt:
+                print("\n\nGoodbye!")
+                break
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+
 def run_model(
     ui_framework: UIFramework,
     deployment_mode: DeploymentMode,
@@ -207,7 +254,10 @@ def run_model(
             port = 8000
     
     # Initialize and run UI/API
-    if ui_framework == UIFramework.STREAMLIT:
+    if ui_framework == UIFramework.TERMINAL:
+        ui = TerminalUI(model)
+        ui.run()
+    elif ui_framework == UIFramework.STREAMLIT:
         ui = StreamlitUI(model)
         ui.run(host, port)
     elif ui_framework == UIFramework.FLASK:

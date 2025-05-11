@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.veritas.config import Config
 from src.veritas.utils import setup_logging
 from src.veritas.chunking import chunk_text
-from src.veritas.rag import RAGSystem
+from src.veritas.rag import RAGSystem, query_rag
 
 # Configure logging
 logger = setup_logging(__name__)
@@ -64,20 +64,23 @@ def rag_command(args):
         from scripts.build_rag import main as build_rag
         build_rag()
     elif args.mode == 'run':
-        from scripts.run import main as run_rag
-        run_rag()
+        from scripts.run import run_model, UIFramework, DeploymentMode
+        # Use terminal UI
+        run_model(
+            UIFramework.TERMINAL,
+            DeploymentMode.LOCAL
+        )
     elif args.mode == 'query':
         # Direct query mode
-        system = RAGSystem()
-        index_path = os.path.join(Config.INDICES_DIR, "latest")
-        system.load_index(index_path)
-        results = system.retrieve(args.query, k=args.top_k)
-        
+        result = query_rag(args.query, top_k=args.top_k)
         print(f"\nQuery: {args.query}")
-        print("\nRetrieved chunks:")
-        for i, result in enumerate(results, 1):
-            print(f"\nResult {i} (Score: {result['score']:.4f}):")
-            print(result["text"][:500] + "..." if len(result["text"]) > 500 else result["text"])
+        print("\nRetrieved chunks:\n")
+        for i, chunk in enumerate(result["retrieved_chunks"], 1):
+            print(f"Result {i} (Score: {chunk['score']:.4f}):")
+            print(chunk["chunk"][:500] + "..." if len(chunk["chunk"]) > 500 else chunk["chunk"])
+            print()
+        print("Answer from Mistral 2:\n")
+        print(result["answer"])
 
 def parse_args():
     """Parse command-line arguments."""
