@@ -2,7 +2,7 @@
 """
 run.py
 
-Run Mistral model with support for different UI frameworks and deployment options.
+Run Mistral model with support for terminal interface.
 Optimized for M4 Mac to prevent kernel_task overload.
 """
 
@@ -40,6 +40,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Create temporary directory on SSD with absolute path
+SSD_TEMP_DIR = "/Volumes/8SSD/veritas/tmp"
+os.makedirs(SSD_TEMP_DIR, exist_ok=True)
+logger.info(f"Using temporary directory: {SSD_TEMP_DIR}")
+
 # Set environment variables to limit resource usage - Optimized for M4 Mac with 128GB RAM
 os.environ.update({
     'OMP_NUM_THREADS': '4',  # Allow more OpenMP threads for M4
@@ -51,6 +56,10 @@ os.environ.update({
     'PYTORCH_MPS_MEMORY_LIMIT': '100GB',  # Use more of available RAM
     'PYTORCH_ENABLE_MPS_FALLBACK': '1',  # Enable fallback
     'TRANSFORMERS_NO_ADVISORY_WARNINGS': '1',  # Reduce warnings
+    'TMPDIR': SSD_TEMP_DIR,  # Set temp directory to SSD instead of Macintosh HD
+    'TORCH_HOME': os.path.join(SSD_TEMP_DIR, 'torch'),  # Store PyTorch cache on SSD
+    'TRANSFORMERS_CACHE': os.path.join(SSD_TEMP_DIR, 'transformers'),  # Store Transformers cache on SSD
+    'HF_HOME': os.path.join(SSD_TEMP_DIR, 'huggingface'),  # Store HuggingFace cache on SSD
 })
 
 # Set process priority at the start
@@ -60,9 +69,6 @@ p.nice(10)  # Lower but not too low (0-19, higher is lower priority)
 class UIFramework(Enum):
     """Supported UI frameworks."""
     TERMINAL = "terminal"
-    STREAMLIT = "streamlit"
-    FLASK = "flask"
-    FASTAPI = "fastapi"
 
 class DeploymentMode(Enum):
     """Supported deployment modes."""
@@ -113,7 +119,8 @@ class MistralModel:
                 self.config.model_name,
                 trust_remote_code=True,
                 use_fast=True,  # Use fast tokenizer when available
-                padding_side="left"  # More efficient for generation
+                padding_side="left",  # More efficient for generation
+                cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
             )
             
             # Skip quantization attempts and load directly with full precision
@@ -123,7 +130,8 @@ class MistralModel:
                 torch_dtype=self.config.torch_dtype,
                 device_map="auto",
                 trust_remote_code=True,
-                use_cache=self.config.use_cache
+                use_cache=self.config.use_cache,
+                cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
             )
             
             # Setup generation pipeline
@@ -288,89 +296,6 @@ Answer:"""
                 torch.cuda.empty_cache()
             raise
 
-class StreamlitUI:
-    """Streamlit-based user interface."""
-    
-    def __init__(self, model: MistralModel):
-        self.model = model
-    
-    def run(self, host: str = "0.0.0.0", port: int = 8501):
-        """Run the Streamlit interface."""
-        try:
-            import streamlit as st
-        except ImportError:
-            logger.error("Streamlit is required for this UI framework")
-            raise
-        
-        st.title("Mistral Chat")
-        st.write("Chat with the Mistral model")
-        
-        prompt = st.text_area("Enter your prompt:", height=100)
-        if st.button("Generate"):
-            if prompt:
-                with st.spinner("Generating..."):
-                    response = self.model.generate(prompt)
-                st.write("Response:")
-                st.write(response)
-            else:
-                st.warning("Please enter a prompt")
-
-class FlaskAPI:
-    """Flask-based API server."""
-    
-    def __init__(self, model: MistralModel):
-        self.model = model
-    
-    def run(self, host: str = "0.0.0.0", port: int = 5000):
-        """Run the Flask API server."""
-        try:
-            from flask import Flask, request, jsonify
-        except ImportError:
-            logger.error("Flask is required for this API framework")
-            raise
-        
-        app = Flask(__name__)
-        
-        @app.route("/generate", methods=["POST"])
-        def generate():
-            data = request.get_json()
-            prompt = data.get("prompt")
-            if not prompt:
-                return jsonify({"error": "No prompt provided"}), 400
-            
-            response = self.model.generate(prompt)
-            return jsonify({"response": response})
-        
-        app.run(host=host, port=port)
-
-class FastAPI:
-    """FastAPI-based API server."""
-    
-    def __init__(self, model: MistralModel):
-        self.model = model
-    
-    def run(self, host: str = "0.0.0.0", port: int = 8000):
-        """Run the FastAPI server."""
-        try:
-            from fastapi import FastAPI, HTTPException
-            from pydantic import BaseModel
-            import uvicorn
-        except ImportError:
-            logger.error("FastAPI and uvicorn are required for this API framework")
-            raise
-        
-        app = FastAPI(title="Mistral API")
-        
-        class GenerateRequest(BaseModel):
-            prompt: str
-        
-        @app.post("/generate")
-        async def generate(request: GenerateRequest):
-            response = self.model.generate(request.prompt)
-            return {"response": response}
-        
-        uvicorn.run(app, host=host, port=port)
-
 class TerminalUI:
     """High-performance terminal-based user interface."""
     
@@ -442,14 +367,14 @@ def run_model(
     port: Optional[int] = None
 ) -> None:
     """
-    Run the Mistral model with the specified UI framework and deployment mode.
+    Run the Mistral model with the terminal UI.
     
     Args:
-        ui_framework: UI framework to use
+        ui_framework: UI framework to use (only TERMINAL is supported)
         deployment_mode: Deployment mode
         model_config: Model configuration
-        host: Host to bind to
-        port: Port to bind to
+        host: Host to bind to (not used for terminal UI)
+        port: Port to bind to (not used for terminal UI)
     """
     try:
         # Initialize model
@@ -463,30 +388,12 @@ def run_model(
             
         model.load()
         
-        # Set default port based on framework
-        if port is None:
-            if ui_framework == UIFramework.STREAMLIT:
-                port = 8501
-            elif ui_framework == UIFramework.FLASK:
-                port = 5000
-            elif ui_framework == UIFramework.FASTAPI:
-                port = 8000
-        
-        # Initialize and run UI/API
-        if ui_framework == UIFramework.TERMINAL:
-            ui = TerminalUI(model)
-            ui.run()
-        elif ui_framework == UIFramework.STREAMLIT:
-            ui = StreamlitUI(model)
-            ui.run(host, port)
-        elif ui_framework == UIFramework.FLASK:
-            api = FlaskAPI(model)
-            api.run(host, port)
-        elif ui_framework == UIFramework.FASTAPI:
-            api = FastAPI(model)
-            api.run(host, port)
-        else:
-            raise ValueError(f"Unsupported UI framework: {ui_framework}")
+        # Only terminal UI is supported
+        if ui_framework != UIFramework.TERMINAL:
+            logger.warning(f"Unsupported UI framework: {ui_framework}. Using Terminal UI instead.")
+            
+        ui = TerminalUI(model)
+        ui.run()
     except Exception as e:
         logger.error(f"Error in run_model: {str(e)}")
         # Final cleanup
@@ -511,16 +418,16 @@ if __name__ == "__main__":
                       help="Name of the model to use")
     parser.add_argument("--host", type=str,
                       default="0.0.0.0",
-                      help="Host to bind to")
+                      help="Host to bind to (not used for terminal UI)")
     parser.add_argument("--port", type=int,
-                      help="Port to bind to")
+                      help="Port to bind to (not used for terminal UI)")
     
     args = parser.parse_args()
     
     # Create model config
     model_config = ModelConfig(model_name=args.model_name)
     
-    # Run model
+    # Run model with terminal UI
     run_model(
         UIFramework(args.ui_framework),
         DeploymentMode(args.deployment_mode),
