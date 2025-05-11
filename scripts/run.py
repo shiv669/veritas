@@ -16,6 +16,10 @@ import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import re
+import multiprocessing as mp
+from multiprocessing import Process, Queue, cpu_count
+import psutil  # For better process management
+import torch.multiprocessing as torch_mp  # Use PyTorch's multiprocessing
 
 # Get the absolute path to the project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +36,21 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Set environment variables to limit resource usage
+os.environ.update({
+    'OMP_NUM_THREADS': '1',  # Limit OpenMP threads
+    'MKL_NUM_THREADS': '1',  # Limit MKL threads
+    'NUMEXPR_NUM_THREADS': '1',  # Limit NumExpr threads
+    'TOKENIZERS_PARALLELISM': 'false',  # Disable tokenizer parallelism
+    'PYTORCH_MPS_HIGH_WATERMARK_RATIO': '0.0',  # Disable automatic growth
+    'PYTORCH_MPS_MEMORY_LIMIT': '102GB',  # 80% of 128GB
+    'PYTORCH_ENABLE_MPS_FALLBACK': '1',  # Enable fallback for stability
+})
+
+# Set process priority at the start
+p = psutil.Process(os.getpid())
+p.nice(15)  # Even lower priority for main process
 
 class UIFramework(Enum):
     """Supported UI frameworks."""
@@ -50,13 +69,19 @@ class DeploymentMode(Enum):
 class ModelConfig:
     """Configuration for Mistral model."""
     model_name: str = Config.LLM_MODEL
-    max_new_tokens: int = 512  # Reduced from 1024 to get more concise responses
-    temperature: float = 0.3    # Reduced from 0.7 to get more focused responses
+    max_new_tokens: int = 256  # Reduced from 512
+    temperature: float = 0.3
     top_p: float = 0.9
     top_k: int = 50
     repetition_penalty: float = 1.1
     do_sample: bool = True
     device: str = get_device()
+    # M4-specific optimizations
+    torch_dtype: torch.dtype = torch.float32 if get_device() == "mps" else torch.float16
+    use_cache: bool = True
+    num_threads: int = 1
+    batch_size: int = 1
+    max_context_length: int = 1024  # Limit context length
 
 class MistralModel:
     """Wrapper for Mistral model."""
@@ -65,33 +90,103 @@ class MistralModel:
         self.config = config
         self.model = None
         self.tokenizer = None
+        
+        # Set number of threads for CPU operations
+        if self.config.device == "cpu":
+            torch.set_num_threads(self.config.num_threads)
     
     def load(self):
         """Load the model and tokenizer."""
         logger.info(f"Loading model {self.config.model_name}...")
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
+        
+        # Load model with optimizations
         self.model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
-            torch_dtype=torch.float16 if self.config.device == "cuda" else torch.float32
+            torch_dtype=self.config.torch_dtype,
+            use_cache=self.config.use_cache,
+            low_cpu_mem_usage=True  # Reduce CPU memory usage during loading
         ).to(self.config.device)
+        
+        # Enable model optimizations
+        if self.config.device == "mps":
+            self.model = self.model.to("mps")
+            # Enable MPS optimizations
+            torch.mps.empty_cache()  # Clear MPS cache
+        elif self.config.device == "cuda":
+            self.model = self.model.cuda()
+            torch.cuda.empty_cache()  # Clear CUDA cache
+        
         logger.info("Model loaded successfully")
     
-    def generate(self, prompt: str) -> str:
-        """Generate text from prompt."""
+    def get_retrieval_context(self, prompt: str) -> str:
+        """Get relevant context for the prompt from the RAG system."""
+        # For now, return a simple placeholder context
+        # In a real implementation, this would query your RAG system
+        return "This is a placeholder context. In a real implementation, this would contain relevant information retrieved from your knowledge base."
+    
+    def generate(self, prompt: str) -> tuple[str, str, str]:
+        """Generate text from prompt and return context, direct answer, and combined response."""
         if not self.model or not self.tokenizer:
             raise RuntimeError("Model not loaded. Call load() first.")
         
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.config.device)
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=self.config.max_new_tokens,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k,
-            repetition_penalty=self.config.repetition_penalty,
-            do_sample=self.config.do_sample
-        )
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        try:
+            # Get retrieval context (placeholder for now)
+            context = "This is a placeholder context. In a real implementation, this would contain relevant information retrieved from your knowledge base."
+            
+            # Generate direct answer without context
+            direct_prompt = f"Question: {prompt}\n\nAnswer:"
+            direct_inputs = self.tokenizer(direct_prompt, return_tensors="pt", truncation=True, max_length=self.config.max_context_length).to(self.config.device)
+            
+            with torch.inference_mode():
+                direct_outputs = self.model.generate(
+                    **direct_inputs,
+                    max_new_tokens=self.config.max_new_tokens,
+                    temperature=self.config.temperature,
+                    top_p=self.config.top_p,
+                    top_k=self.config.top_k,
+                    repetition_penalty=self.config.repetition_penalty,
+                    do_sample=self.config.do_sample,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            direct_response = self.tokenizer.decode(direct_outputs[0], skip_special_tokens=True)
+            
+            # Generate combined response with context
+            combined_prompt = f"Context: {context}\n\nQuestion: {prompt}\n\nAnswer:"
+            combined_inputs = self.tokenizer(combined_prompt, return_tensors="pt", truncation=True, max_length=self.config.max_context_length).to(self.config.device)
+            
+            with torch.inference_mode():
+                combined_outputs = self.model.generate(
+                    **combined_inputs,
+                    max_new_tokens=self.config.max_new_tokens,
+                    temperature=self.config.temperature,
+                    top_p=self.config.top_p,
+                    top_k=self.config.top_k,
+                    repetition_penalty=self.config.repetition_penalty,
+                    do_sample=self.config.do_sample,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            combined_response = self.tokenizer.decode(combined_outputs[0], skip_special_tokens=True)
+            
+            # Clean up memory
+            del direct_outputs, combined_outputs
+            del direct_inputs, combined_inputs
+            if self.config.device == "mps":
+                torch.mps.empty_cache()
+            elif self.config.device == "cuda":
+                torch.cuda.empty_cache()
+            
+            return context, direct_response, combined_response
+        
+        except Exception as e:
+            logger.error(f"Error during generation: {str(e)}")
+            if self.config.device == "mps":
+                torch.mps.empty_cache()
+            elif self.config.device == "cuda":
+                torch.cuda.empty_cache()
+            raise
 
 class StreamlitUI:
     """Streamlit-based user interface."""
@@ -176,51 +271,115 @@ class FastAPI:
         
         uvicorn.run(app, host=host, port=port)
 
+class ModelWorker(Process):
+    """Worker process for model inference."""
+    def __init__(self, model_config, input_queue, output_queue):
+        super().__init__()
+        self.model_config = model_config
+        self.input_queue = input_queue
+        self.output_queue = output_queue
+        self.model = None
+        self.tokenizer = None
+        self.daemon = True
+    
+    def run(self):
+        """Run the worker process."""
+        try:
+            # Set process priority
+            p = psutil.Process(os.getpid())
+            p.nice(20)  # Even lower priority for workers
+            
+            # Initialize model in the worker process
+            self.model = MistralModel(self.model_config)
+            self.model.load()
+            
+            while True:
+                task = self.input_queue.get()
+                if task is None:
+                    break
+                
+                prompt = task
+                try:
+                    # Generate response with strict memory management
+                    with torch.inference_mode():
+                        response = self.model.generate(prompt)
+                    self.output_queue.put(("success", response))
+                except Exception as e:
+                    self.output_queue.put(("error", str(e)))
+                
+                # Aggressive memory cleanup
+                import gc
+                gc.collect()
+                if self.model_config.device == "mps":
+                    torch.mps.empty_cache()
+                elif self.model_config.device == "cuda":
+                    torch.cuda.empty_cache()
+        except Exception as e:
+            self.output_queue.put(("error", f"Worker error: {str(e)}"))
+        finally:
+            del self.model
+            del self.tokenizer
+            if self.model_config.device == "mps":
+                torch.mps.empty_cache()
+            elif self.model_config.device == "cuda":
+                torch.cuda.empty_cache()
+
 class TerminalUI:
     """Simple terminal-based user interface."""
     
     def __init__(self, model: MistralModel):
         self.model = model
-        # Initialize RAG system
-        from src.veritas.rag import RAGSystem
-        index_path = os.path.join(Config.MODELS_DIR, "faiss", "index.faiss")
-        self.rag_system = RAGSystem(index_path=index_path)
+        self.num_workers = 1  # Use only one worker
     
     def run(self, host: str = "0.0.0.0", port: int = None):
         """Run the terminal interface."""
-        print("\nWelcome to Mistral Chat!")
-        print("Type 'exit' or 'quit' to end the session.\n")
+        print("Welcome to Mistral Chat! (Using 1 worker)")
+        print("Type 'exit' or 'quit' to end the session.")
+        print()
         
         while True:
             try:
-                prompt = input("\nEnter your prompt: ")
+                prompt = input("Enter your prompt: ").strip()
+                
                 if prompt.lower() in ['exit', 'quit']:
-                    print("\nGoodbye!")
                     break
                 
-                if prompt.strip():
-                    print("\nRetrieving relevant context...")
-                    # Get RAG results
-                    result = query_rag(prompt, self.rag_system)
-                    
-                    # Show retrieved chunks
-                    print("\nRetrieved Context:")
-                    print("-" * 50)
-                    for i, chunk in enumerate(result["retrieved_chunks"], 1):
-                        print(f"\nChunk {i} (Score: {chunk['score']:.4f}):")
-                        print(chunk["chunk"])
-                        print("-" * 50)
-                    
-                    # Show answer
-                    print("\nAnswer:")
-                    print(result["answer"])
-                else:
-                    print("Please enter a prompt.")
+                if not prompt:
+                    continue
+                
+                # Get context, direct answer, and combined response
+                context, direct_response, combined_response = self.model.generate(prompt)
+                
+                # Display all three parts
+                print("\n1. Retrieved Context:")
+                print("=" * 50)
+                print(context)
+                print("=" * 50)
+                
+                print("\n2. Mistral's Direct Answer:")
+                print("=" * 50)
+                print(direct_response)
+                print("=" * 50)
+                
+                print("\n3. Final Response (Combined):")
+                print("=" * 50)
+                print(combined_response)
+                print("=" * 50)
+                print()
+                
+                # Force garbage collection
+                import gc
+                gc.collect()
+                
             except KeyboardInterrupt:
-                print("\n\nGoodbye!")
+                print("\nExiting...")
                 break
             except Exception as e:
                 print(f"\nError: {str(e)}")
+                if self.model.config.device == "mps":
+                    torch.mps.empty_cache()
+                elif self.model.config.device == "cuda":
+                    torch.cuda.empty_cache()
 
 def run_model(
     ui_framework: UIFramework,
