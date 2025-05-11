@@ -1,177 +1,187 @@
-# Veritas: Research Assistant with RAG
+# Veritas: High-Performance RAG for Apple Silicon
 
-Veritas is a modular Retrieval-Augmented Generation (RAG) system powered by Mistral 2 7B, designed to help researchers access, verify, and synthesize scientific knowledge with full local control.
+Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips, with particular focus on the M4 Mac with 128GB RAM. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B.
 
-![Veritas Logo](docs/images/logo.png)
+## 🚀 Key Features
 
-## Overview
+- **Apple Silicon Optimized**: Specially tuned for M1, M2, M3, and M4 Macs with MPS (Metal Performance Shaders) acceleration
+- **Memory-Efficient Design**: Carefully manages memory to prevent OOM errors even with large models
+- **High-Quality RAG**: Accurate document retrieval and context-aware answer generation
+- **Terminal Interface**: Clean, simple interface for direct interaction without web frameworks
+- **Modular Architecture**: Clear separation between core RAG implementation and application layer
 
-Veritas provides citation-backed responses by retrieving relevant information from your document collection and using Mistral 2 7B to generate accurate answers with proper context.
+## 🔧 System Requirements
 
-**Key Features:**
-- Local Mistral 2 7B inference with MPS support for Apple Silicon
-- RAG system optimized for scientific research documents
-- Terminal UI for easy interaction
-- Memory-optimized for M4 Mac with up to 128GB RAM
+- Apple Silicon Mac (M1, M2, M3, or M4)
+- macOS Monterey or later
+- 16GB RAM minimum (32GB+ recommended, 128GB optimal for M4)
+- 8GB+ free storage (SSD recommended)
+- Python 3.9 or higher
 
-## Quick Start
+## 📦 Installation
 
-### Prerequisites
-
-- Python 3.8+
-- 16GB+ RAM (32GB+ recommended)
-- For Apple Silicon: macOS with M1/M2/M3/M4 chip
-- CUDA-compatible GPU for non-Mac systems
-
-### Installation
-
-1. **Clone the repository:**
+1. Clone the repository:
    ```bash
    git clone https://github.com/yourusername/veritas.git
    cd veritas
    ```
 
-2. **Install dependencies:**
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Download Mistral 2 7B model:**
+3. Download and prepare the Mistral model (if needed):
    ```bash
-   mkdir -p models/mistral-7b
-   python -c "from huggingface_hub import snapshot_download; snapshot_download('mistralai/Mistral-7B-v0.2', local_dir='models/mistral-7b')"
+   python scripts/download_model.py
    ```
 
-## Usage Guide
+## 🔍 Quick Start
 
-### Document Processing Pipeline
-
-Veritas works by processing your documents through several stages:
-
-1. **Processing**: Clean and prepare your documents
-2. **Chunking**: Split documents into manageable chunks
-3. **Indexing**: Create a searchable FAISS index
-4. **Query**: Ask questions against your document collection
-
-### Step 1: Add Your Documents
-
-Place your research documents in the `data/input/` directory.
-
-### Step 2: Process Your Documents
-
-The CLI provides a unified interface for all operations:
+Run the terminal-based interface:
 
 ```bash
-# Process JSON documents
-python scripts/cli.py process json --input-file data/input/documents.json --output-file data/processed/cleaned.json
-
-# Or process text documents
-python scripts/cli.py process text --input-file data/input/paper.txt --output-file data/processed/cleaned.txt
+python scripts/run.py
 ```
 
-### Step 3: Create Text Chunks
+This will start the RAG system with the terminal UI, where you can directly ask questions.
 
-```bash
-python scripts/cli.py chunk --input-file data/processed/cleaned.json --output-dir data/chunks --chunk-size 1000 --overlap 100
+## 🏗️ Architecture
+
+Veritas is designed with a clear separation of concerns:
+
+- **Core RAG Implementation** (`src/veritas/rag.py`): The heart of the system that handles retrieval and generation
+- **Application Layer** (`scripts/run.py`): Configures and uses the core RAG system for specific use cases
+- **Configuration** (`src/veritas/config.py`): Centralized settings for the entire system
+- **Apple Silicon Optimizations** (`src/veritas/mps_utils.py`): Specialized utilities for Apple's Metal framework
+- **Text Processing** (`src/veritas/chunking.py`): Document segmentation for efficient indexing and retrieval
+
+### UML Class Diagram
+
+```
+┌─────────────┐     ┌───────────────┐
+│ MistralModel│     │   RAGSystem   │
+│ (run.py)    │────>│  (rag.py)     │
+└─────────────┘     └───────────────┘
+       │                   │
+       │                   │
+       ▼                   ▼
+┌─────────────┐     ┌───────────────┐
+│ ModelConfig │     │    Config     │
+└─────────────┘     └───────────────┘
+                           │
+                           ▼
+                    ┌───────────────┐
+                    │  mps_utils    │
+                    └───────────────┘
 ```
 
-### Step 4: Build the FAISS Index
+## 🧩 Core Components
 
-```bash
-python scripts/cli.py index --parallel
+### RAGSystem (src/veritas/rag.py)
+
+The main class that implements the RAG functionality:
+
+```python
+from veritas import RAGSystem
+
+# Create a RAG system
+rag = RAGSystem(
+    embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    llm_model="models/mistral-7b",
+    index_path="models/faiss",
+    device="mps"  # Use Apple Silicon acceleration
+)
+
+# Generate a complete RAG response
+response = rag.generate_rag_response(
+    query="How does a RAG system work?",
+    top_k=5,  # Number of chunks to retrieve
+    max_new_tokens=200
+)
+
+print(response["combined_response"])
 ```
 
-### Step 5: Run the RAG System
+### MistralModel (scripts/run.py)
 
-```bash
-python scripts/cli.py rag --mode run
+A wrapper around RAGSystem that handles configuration and initialization:
+
+```python
+from src.veritas.config import Config
+from scripts.run import MistralModel, ModelConfig
+
+# Configure the model
+config = ModelConfig(
+    model_name=Config.LLM_MODEL,
+    max_new_tokens=200,
+    temperature=0.3,
+    max_retrieved_chunks=3
+)
+
+# Create and load model
+model = MistralModel(config)
+model.load()
+
+# Generate a response with context
+context, direct_response, combined_response = model.generate(
+    "What are the advantages of RAG systems over pure LLMs?"
+)
 ```
 
-This launches the interactive terminal interface where you can query your documents.
+## 🚴‍♀️ Advanced Usage
 
-### Direct Query Mode
+### Custom Document Chunking
 
-For scripted queries, use the direct query mode:
+```python
+from veritas import chunk_text, get_chunk_size
 
-```bash
-python scripts/cli.py rag --mode query --query "What was the main finding of the study about unions and workplace safety?" --top-k 3
+# Get optimal chunk size based on document length
+document_length = len(large_document)
+chunk_size = get_chunk_size(document_length, target_chunks=20)
+
+# Generate chunks with custom parameters
+chunks = chunk_text(
+    text=large_document,
+    chunk_size=chunk_size,
+    overlap=100  # Words of overlap between chunks
+)
+
+# Process each chunk
+for i, chunk in enumerate(chunks):
+    print(f"Chunk {i}: {chunk[:50]}...")
 ```
-
-## Advanced Configuration
 
 ### Memory Optimization
 
-For machines with different RAM configurations, edit the environment variables in `scripts/run.py`:
-
 ```python
-os.environ.update({
-    'PYTORCH_MPS_HIGH_WATERMARK_RATIO': '0.0',  # Disable upper limit to prevent OOM
-    'PYTORCH_MPS_MEMORY_LIMIT': '80GB',  # Adjust based on your RAM
-})
+from veritas.mps_utils import optimize_memory_for_m4, clear_mps_cache
+
+# Apply comprehensive M4 optimizations at startup
+optimize_memory_for_m4()
+
+# Clear cache after heavy operations
+result = model.generate(complex_query)
+clear_mps_cache()  # Free up GPU memory
 ```
 
-### Model Configuration
+## 📊 Performance Optimization
 
-Adjust model parameters in `scripts/run.py` under the `ModelConfig` class:
+Veritas includes several optimizations for Apple Silicon:
 
-```python
-@dataclass
-class ModelConfig:
-    max_new_tokens: int = 200     # Reduce for memory savings
-    temperature: float = 0.3      # Lower for more deterministic answers
-    max_retrieved_chunks: int = 2 # Increase for more context (more memory)
-```
+1. **MPS Acceleration**: Uses Metal Performance Shaders for faster computation
+2. **Memory Management**: Carefully controls memory usage to prevent OOM errors
+3. **Half-Precision**: Uses FP16 where possible for better performance
+4. **Caching Control**: Explicit cache clearing to prevent memory leaks
+5. **SSD Offloading**: Uses SSD for temporary files to reduce RAM pressure
 
-## Troubleshooting
+## 📜 License
 
-### Common Issues
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-- **Memory Errors**: Reduce `max_new_tokens` and `max_retrieved_chunks` in ModelConfig
-- **Index Not Found**: Ensure your indexing process completed successfully
-- **Model Loading Errors**: Verify Mistral 2 7B is downloaded correctly
-- **High CPU Usage**: Lower process priority with `p.nice(15)` in run.py
+## 🙏 Acknowledgements
 
-## Directory Structure
-
-```
-veritas/
-├── data/
-│   ├── input/          # Your source documents
-│   ├── processed/      # Cleaned documents
-│   └── chunks/         # Text chunks for indexing
-├── models/
-│   ├── faiss/          # FAISS index and chunks
-│   └── mistral-7b/     # Mistral 2 7B model files
-├── scripts/
-│   ├── cli.py          # Command line interface
-│   └── run.py          # Core execution script
-└── src/veritas/
-    ├── config.py       # Configuration settings
-    ├── rag.py          # RAG implementation
-    └── chunking.py     # Document chunking logic
-```
-
-## Changelog
-
-### v1.1 (Current)
-- Optimized for M4 Max with 128GB RAM
-- Memory-efficient RAG implementation
-- Improved context chunking for better responses
-- Terminal UI with dual-generation approach
-- Fixed OOM errors with MPS backend
-
-### v1.0
-- Initial implementation with basic RAG capabilities
-- Support for Mistral 2 7B model
-- Document processing pipeline
-- FAISS indexing for efficient retrieval
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Mistral AI for the Mistral 2 7B model
-- FAISS for vector search capabilities
-- Sentence Transformers for document embeddings
+- Mistral AI for their excellent 7B model
+- Hugging Face for Transformers and SentenceTransformers
+- Facebook Research for FAISS
+- The PyTorch team for MPS support
