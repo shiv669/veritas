@@ -77,3 +77,7 @@ htmlcov/
 .tox/
 coverage.xml
 *.cover
+
+# Temporary directories
+tmp/
+/tmp/
