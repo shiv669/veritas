@@ -88,8 +88,11 @@ class RAGSystem:
             raise FileNotFoundError(f"Index path not found: {index_path}")
             
         # Load chunks (npy or fallback to JSON)
-        chunks_npy = os.path.join(os.path.dirname(index_path), "chunks.npy")
-        chunks_json = os.path.join(os.path.dirname(index_path), "chunks.json")
+        chunks_npy = os.path.join(index_path, "chunks.npy")
+        chunks_json = os.path.join(index_path, "chunks.json")
+        
+        logger.info(f"Looking for chunks at: {chunks_json}")
+        
         if os.path.exists(chunks_npy):
             self.chunks = np.load(chunks_npy, allow_pickle=True).tolist()
         elif os.path.exists(chunks_json):
@@ -99,8 +102,10 @@ class RAGSystem:
         else:
             logger.warning(f"Chunks file not found (expected chunks.npy or chunks.json) in: {index_path}")
         
-        # Load index
-        index_file = os.path.join(os.path.dirname(index_path), "index.faiss")
+        # Load index - use the same directory as chunks
+        index_file = os.path.join(index_path, "index.faiss")
+        logger.info(f"Looking for index at: {index_file}")
+        
         if os.path.exists(index_file):
             self.index = faiss.read_index(index_file)
         else:
@@ -202,7 +207,8 @@ def query_rag(query: str, rag_system: RAGSystem = None, top_k: int = 5) -> Dict[
     # Create RAG system if not provided
     if rag_system is None:
         logger.info("Creating new RAG system")
-        index_path = os.path.join(Config.MODELS_DIR, "faiss", "index.faiss")
+        index_path = os.path.join(Config.MODELS_DIR, "faiss")
+        logger.info(f"Using index path: {index_path}")
         rag_system = RAGSystem(index_path=index_path)
     
     # Retrieve relevant chunks
