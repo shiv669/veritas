@@ -1,0 +1,38 @@
+# Changelog
+
+All notable changes to the Veritas project will be documented in this file.
+
+## [1.1.0] - 2025-05-11
+
+### Added
+- Terminal UI with three-part response display (context, direct answer, combined)
+- Improved context chunking for better memory efficiency
+- Support for M4 Max optimization with up to 128GB RAM
+- Memory clean-up routines to prevent OOM errors
+
+### Changed
+- Optimized RAG implementation for better performance
+- Reduced default `max_new_tokens` from 512 to 200 for stability
+- Changed default `max_retrieved_chunks` from 5 to 2 for memory efficiency
+- Updated environment variables for better MPS memory management
+- Improved prompt format for better context handling
+
+### Fixed
+- Fixed OOM errors with MPS backend by setting `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0`
+- Fixed context processing to prevent nonsensical responses
+- Fixed RAM usage spikes during generation
+- Addressed kernel_task high CPU usage on Apple Silicon
+
+### Removed
+- Removed quantization fallback logic in favor of direct full precision loading
+- Removed multiprocessing worker implementation in favor of simpler architecture
+
+## [1.0.0] - 2025-04-15
+
+### Added
+- Initial RAG system implementation
+- Support for Mistral 2 7B model
+- Document processing pipeline
+- FAISS indexing for efficient retrieval
+- Basic CLI interface
+- Support for CUDA and MPS acceleration 
