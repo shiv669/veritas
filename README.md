@@ -1,211 +1,177 @@
-# Veritas v1.0: A Scientist for Autonomous Research
+# Veritas: Research Assistant with RAG
 
-**Veritas** is an open-source, modular Large Language Model (LLM) for scientific research.  
+Veritas is a modular Retrieval-Augmented Generation (RAG) system powered by Mistral 2 7B, designed to help researchers access, verify, and synthesize scientific knowledge with full local control.
 
-Designed for transparency, adaptability, and epistemic trust, Veritas empowers researchers to access, verify, and synthesize scientific knowledge at scale — with full local control.
+![Veritas Logo](docs/images/logo.png)
 
-## Architecture
+## Overview
 
-Veritas is built on the **Mistral-2 7B** foundation model, enhanced with:
-- Fine-tuning via QLoRA for domain adaptation
-- 100K+ token context windows through LongLoRA + positional interpolation
-- RAG (Retrieval-Augmented Generation) system for citation-backed reasoning
+Veritas provides citation-backed responses by retrieving relevant information from your document collection and using Mistral 2 7B to generate accurate answers with proper context.
 
-## Features
+**Key Features:**
+- Local Mistral 2 7B inference with MPS support for Apple Silicon
+- RAG system optimized for scientific research documents
+- Terminal UI for easy interaction
+- Memory-optimized for M4 Mac with up to 128GB RAM
 
-### Core Capabilities
-- **Mistral 2 7B Architecture** – Built on one of the most powerful open-source language models
-- **Citation-Backed Reasoning** – Generates answers with verifiable references using RAG
-- **100K+ Token Context** – Process entire research papers, books, or multi-document corpora
-
-### Research-Optimized Design
-- **Scientific Knowledge Base** – Pre-indexed scientific literature for immediate research assistance
-- **Specialized Retrieval** – Optimized for scientific papers, technical documents, and research materials
-- **Domain-Specific Adapters** – Load specialized LoRA adapters for fields like neuroscience, law, or medicine
-
-### Advanced Implementation
-- **Modular RAG Pipeline** – Weekly knowledge updates without retraining
-- **Optimized Performance** – Support for CUDA, MPS (Apple Silicon), and CPU deployment
-- **Extensible Architecture** – Easy to customize for specific research domains
-
-## Repository Structure
-
-### Core Components
-
-| Directory | Description |
-|-----------|-------------|
-| `src/veritas/` | Core implementation of Veritas system |
-| `scripts/` | Utility scripts for processing, indexing and analysis |
-| `data/` | Document storage and processed data |
-| `models/` | Model files including Mistral 2 7B and embeddings |
-| `tests/` | Comprehensive test suite |
-| `docs/` | Documentation and resources |
-| `logs/` | Log files from training and processing |
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/veritas/rag.py` | RAG system implementation |
-| `src/veritas/config.py` | Configuration settings |
-| `src/veritas/chunking.py` | Document chunking logic |
-| `scripts/indexing/build_index.py` | FAISS index builder |
-| `scripts/indexing/format_rag.py` | Document preprocessor |
-
-## Installation
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- pip package manager
-- At least 16GB RAM for inference (32GB+ recommended)
-- For GPU acceleration: 
-  - CUDA-compatible GPU with 8GB+ VRAM for Mistral 2 7B
-  - Apple Silicon Mac for MPS acceleration
+- Python 3.8+
+- 16GB+ RAM (32GB+ recommended)
+- For Apple Silicon: macOS with M1/M2/M3/M4 chip
+- CUDA-compatible GPU for non-Mac systems
 
-### Basic Installation
+### Installation
 
-1. Clone the repository:
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/veritas.git
+   cd veritas
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Download Mistral 2 7B model:**
+   ```bash
+   mkdir -p models/mistral-7b
+   python -c "from huggingface_hub import snapshot_download; snapshot_download('mistralai/Mistral-7B-v0.2', local_dir='models/mistral-7b')"
+   ```
+
+## Usage Guide
+
+### Document Processing Pipeline
+
+Veritas works by processing your documents through several stages:
+
+1. **Processing**: Clean and prepare your documents
+2. **Chunking**: Split documents into manageable chunks
+3. **Indexing**: Create a searchable FAISS index
+4. **Query**: Ask questions against your document collection
+
+### Step 1: Add Your Documents
+
+Place your research documents in the `data/input/` directory.
+
+### Step 2: Process Your Documents
+
+The CLI provides a unified interface for all operations:
+
 ```bash
-git clone https://github.com/yourusername/veritas.git
-cd veritas
+# Process JSON documents
+python scripts/cli.py process json --input-file data/input/documents.json --output-file data/processed/cleaned.json
+
+# Or process text documents
+python scripts/cli.py process text --input-file data/input/paper.txt --output-file data/processed/cleaned.txt
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Install the package in development mode:
-```bash
-pip install -e .
-```
-
-### Model Setup
-
-Veritas requires the Mistral 2 7B model. You can set it up as follows:
+### Step 3: Create Text Chunks
 
 ```bash
-# Create model directory
-mkdir -p models/mistral
-
-# Download Mistral 2 7B model files (adjust URL as needed)
-python -c "from huggingface_hub import snapshot_download; snapshot_download('mistralai/Mistral-7B-v0.2', local_dir='models/mistral')"
+python scripts/cli.py chunk --input-file data/processed/cleaned.json --output-dir data/chunks --chunk-size 1000 --overlap 100
 ```
 
-### Docker Installation (Alternative)
-
-For containerized deployment:
+### Step 4: Build the FAISS Index
 
 ```bash
-docker build -t veritas:1.0 .
-docker run -p 7860:7860 -v $(pwd)/data:/app/data veritas:1.0
+python scripts/cli.py index --parallel
 ```
 
-## Project Structure
+### Step 5: Run the RAG System
+
+```bash
+python scripts/cli.py rag --mode run
+```
+
+This launches the interactive terminal interface where you can query your documents.
+
+### Direct Query Mode
+
+For scripted queries, use the direct query mode:
+
+```bash
+python scripts/cli.py rag --mode query --query "What was the main finding of the study about unions and workplace safety?" --top-k 3
+```
+
+## Advanced Configuration
+
+### Memory Optimization
+
+For machines with different RAM configurations, edit the environment variables in `scripts/run.py`:
+
+```python
+os.environ.update({
+    'PYTORCH_MPS_HIGH_WATERMARK_RATIO': '0.0',  # Disable upper limit to prevent OOM
+    'PYTORCH_MPS_MEMORY_LIMIT': '80GB',  # Adjust based on your RAM
+})
+```
+
+### Model Configuration
+
+Adjust model parameters in `scripts/run.py` under the `ModelConfig` class:
+
+```python
+@dataclass
+class ModelConfig:
+    max_new_tokens: int = 200     # Reduce for memory savings
+    temperature: float = 0.3      # Lower for more deterministic answers
+    max_retrieved_chunks: int = 2 # Increase for more context (more memory)
+```
+
+## Troubleshooting
+
+### Common Issues
+
+- **Memory Errors**: Reduce `max_new_tokens` and `max_retrieved_chunks` in ModelConfig
+- **Index Not Found**: Ensure your indexing process completed successfully
+- **Model Loading Errors**: Verify Mistral 2 7B is downloaded correctly
+- **High CPU Usage**: Lower process priority with `p.nice(15)` in run.py
+
+## Directory Structure
 
 ```
 veritas/
-├── src/
-│   └── veritas/              # Core package implementation
-│       ├── __init__.py       # Package initialization
-│       ├── config.py         # Configuration settings
-│       ├── chunking.py       # Text chunking implementation
-│       ├── rag.py            # RAG system implementation
-│       ├── mps_utils.py      # MPS (Metal Performance Shaders) utilities
-│       └── utils.py          # General utility functions
+├── data/
+│   ├── input/          # Your source documents
+│   ├── processed/      # Cleaned documents
+│   └── chunks/         # Text chunks for indexing
+├── models/
+│   ├── faiss/          # FAISS index and chunks
+│   └── mistral-7b/     # Mistral 2 7B model files
 ├── scripts/
-│   ├── indexing/             # RAG indexing and document processing
-│   │   ├── format_rag.py     # Document formatting and chunking
-│   │   └── build_index.py    # FAISS index construction
-│   └── training/             # Model training scripts
-├── data/                     # Document storage and processed data
-│   ├── input/                # Input documents
-│   ├── output/               # Processed output
-│   ├── chunks/               # Text chunks for indexing
-│   └── indices/              # FAISS indices
-├── models/                   # Model files
-│   ├── embeddings/           # Embedding models
-│   ├── mistral/              # Mistral 2 7B model files
-│   └── lora/                 # LoRA adapter files
-└── logs/                     # Training and processing logs
+│   ├── cli.py          # Command line interface
+│   └── run.py          # Core execution script
+└── src/veritas/
+    ├── config.py       # Configuration settings
+    ├── rag.py          # RAG implementation
+    └── chunking.py     # Document chunking logic
 ```
 
-## Usage
+## Changelog
 
-### Setting Up the Environment
+### v1.1 (Current)
+- Optimized for M4 Max with 128GB RAM
+- Memory-efficient RAG implementation
+- Improved context chunking for better responses
+- Terminal UI with dual-generation approach
+- Fixed OOM errors with MPS backend
 
-1. Install the package in development mode:
-```bash
-pip install -e .
-```
+### v1.0
+- Initial implementation with basic RAG capabilities
+- Support for Mistral 2 7B model
+- Document processing pipeline
+- FAISS indexing for efficient retrieval
 
-2. Ensure you have the required dependencies:
-```bash
-pip install -r requirements.txt
-```
+## License
 
-### Document Processing for RAG
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-1. Place your research documents in the `data/input/` directory
+## Acknowledgments
 
-2. Process documents for RAG:
-```bash
-python scripts/indexing/format_rag.py --input-dir data/input/ --output-file data/processed.json
-```
-
-3. Build the FAISS index:
-```bash
-python scripts/indexing/build_index.py --input-file data/processed.json --output-dir data/indices/latest
-```
-
-### Running the Veritas System
-
-#### Query with RAG
-```python
-from veritas.rag import RAGSystem, query_rag
-
-# Simple query with default settings
-result = query_rag("What are the mechanisms of long-term potentiation?")
-print(result["answer"])
-
-# Advanced usage with custom parameters
-rag = RAGSystem(
-    embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-    llm_model="models/mistral",
-    index_path="data/indices/latest"
-)
-result = rag.retrieve("What are the mechanisms of long-term potentiation?", top_k=7)
-```
-
-#### Using Long Context Windows
-For processing papers or long documents:
-```python
-from veritas.rag import RAGSystem
-
-rag = RAGSystem(llm_model="models/mistral")
-with open("data/input/full_paper.txt", "r") as f:
-    paper_text = f.read()
-    
-response = rag.generate(
-    f"Summarize the following paper: {paper_text}",
-    max_length=4096
-)
-print(response)
-```
-
-## Configuration
-
-The project uses a modular configuration system. Key configuration files:
-
-- `config.py` - Main configuration settings
-- `configs/training_config.yaml` - Training parameters
-- `configs/indexing_config.yaml` - RAG indexing settings
-
-## Release Notes
-
-### Version 1.0 (Current)
-- Full RAG system implementation for citation-backed responses
-- Support for Mistral 2 7B model architecture
-- Enhanced retrieval capabilities for scientific literature
-- Improved chunking and indexing for better information retrieval
+- Mistral AI for the Mistral 2 7B model
+- FAISS for vector search capabilities
+- Sentence Transformers for document embeddings
