@@ -81,58 +81,38 @@ class ModelConfig:
     max_retrieved_chunks: int = 2  # Further reduced for better memory efficiency
 
 class MistralModel:
-    """Wrapper for Mistral model."""
+    """Wrapper for Mistral model that uses RAGSystem internally."""
     
     def __init__(self, config: ModelConfig):
         """Initialize the model with configuration."""
         self.config = config
-        self.model = None
-        self.tokenizer = None
-        self.generator = None
+        self.rag_system = None
         
         # Set number of threads for CPU operations
         if self.config.device == "cpu":
             torch.set_num_threads(self.config.num_threads)
     
     def load(self):
-        """Load the model and tokenizer."""
+        """Load the model and tokenizer using RAGSystem."""
         try:
             logger.info(f"Loading model {self.config.model_name}...")
             
-            # Load tokenizer with efficient settings
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.config.model_name,
-                trust_remote_code=True,
-                use_fast=True,  # Use fast tokenizer when available
-                padding_side="left",  # More efficient for generation
-                cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
+            # Import RAGSystem (inside method to avoid circular imports)
+            from src.veritas.rag import RAGSystem
+            
+            # Create RAGSystem instance with our configuration
+            self.rag_system = RAGSystem(
+                embedding_model=Config.EMBEDDING_MODEL,
+                llm_model=self.config.model_name,
+                device=self.config.device
             )
             
-            # Skip quantization attempts and load directly with full precision
-            logger.info("Loading with full precision...")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.config.model_name,
-                torch_dtype=self.config.torch_dtype,
-                device_map="auto",
-                trust_remote_code=True,
-                use_cache=self.config.use_cache,
-                cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
-            )
-            
-            # Setup generation pipeline
-            self.generator = pipeline(
-                "text-generation",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device_map="auto",
-                torch_dtype=self.config.torch_dtype,
-                batch_size=self.config.batch_size
-            )
+            # For compatibility with the existing interface
+            self.model = self.rag_system.model
+            self.tokenizer = self.rag_system.tokenizer
+            self.generator = self.rag_system.generator
             
             logger.info("Model loaded successfully")
-            # Force memory cleanup after loading
-            if self.config.device == "mps":
-                clear_mps_cache()
             
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
@@ -161,20 +141,15 @@ class MistralModel:
             if not os.path.exists(chunks_file):
                 return "Chunks file not found at: " + chunks_file
             
-            # Initialize RAG system with direct file paths
-            from src.veritas.rag import RAGSystem
-            rag = RAGSystem(
-                embedding_model=Config.EMBEDDING_MODEL,
-                llm_model=self.config.model_name,
-                index_path=index_path,
-                device=self.config.device
-            )
+            # If RAGSystem doesn't have an index yet, load it
+            if not self.rag_system.index:
+                self.rag_system.load_index(index_path)
             
             # Log retrieval attempt
             logger.info(f"Retrieving context for: {prompt[:50]}...")
             
-            # Retrieve chunks with your existing system
-            results = rag.retrieve(prompt, top_k=self.config.max_retrieved_chunks)
+            # Retrieve chunks with the RAGSystem
+            results = self.rag_system.retrieve(prompt, top_k=self.config.max_retrieved_chunks)
             
             if not results:
                 return "No relevant context found in the knowledge base for this query."
@@ -194,7 +169,7 @@ class MistralModel:
     
     def generate(self, prompt: str) -> tuple[str, str, str]:
         """Generate text from prompt with high-performance settings."""
-        if not self.model or not self.tokenizer or not self.generator:
+        if not self.rag_system or not self.model or not self.tokenizer:
             raise RuntimeError("Model not loaded. Call load() first.")
         
         try:
@@ -207,22 +182,12 @@ class MistralModel:
             
             # Generate direct answer without context
             direct_prompt = f"Question: {prompt}\n\nAnswer:"
-            with torch.inference_mode():
-                direct_result = self.generator(
-                    direct_prompt,
-                    max_new_tokens=self.config.max_new_tokens,
-                    temperature=self.config.temperature,
-                    top_p=self.config.top_p,
-                    top_k=self.config.top_k,
-                    do_sample=self.config.do_sample,
-                    repetition_penalty=self.config.repetition_penalty,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-                direct_response = direct_result[0]["generated_text"][len(direct_prompt):]
-            
-            # Memory cleanup between generations
-            if self.config.device == "mps":
-                clear_mps_cache()
+            direct_response = self.rag_system.generate(
+                direct_prompt,
+                max_new_tokens=self.config.max_new_tokens,
+                temperature=self.config.temperature,
+                top_p=self.config.top_p
+            )
             
             # Process context to reduce its size if needed
             if len(context) > 4000:
@@ -257,18 +222,12 @@ Question: {prompt}
 
 Answer:"""
             
-            with torch.inference_mode():
-                combined_result = self.generator(
-                    combined_prompt,
-                    max_new_tokens=self.config.max_new_tokens,
-                    temperature=self.config.temperature,
-                    top_p=self.config.top_p,
-                    top_k=self.config.top_k,
-                    do_sample=self.config.do_sample,
-                    repetition_penalty=self.config.repetition_penalty,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-                combined_response = combined_result[0]["generated_text"][len(combined_prompt):]
+            combined_response = self.rag_system.generate(
+                combined_prompt,
+                max_new_tokens=self.config.max_new_tokens,
+                temperature=self.config.temperature,
+                top_p=self.config.top_p
+            )
             
             return context, direct_response, combined_response
             
