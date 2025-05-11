@@ -4,6 +4,11 @@ run.py
 
 Run Mistral model with support for terminal interface.
 Optimized for M4 Mac to prevent kernel_task overload.
+
+Architecture Overview:
+- This script defines MistralModel, which serves as a wrapper around the core RAGSystem
+- MistralModel configures RAGSystem with appropriate settings for the user's environment
+- The relationship is: MistralModel (wrapper, this file) -> RAGSystem (core implementation, in rag.py)
 """
 
 import json
@@ -81,10 +86,24 @@ class ModelConfig:
     max_retrieved_chunks: int = 2  # Further reduced for better memory efficiency
 
 class MistralModel:
-    """Wrapper for Mistral model that uses RAGSystem internally."""
+    """
+    Wrapper for Mistral model that uses RAGSystem internally.
+    
+    Architecture Note:
+    - MistralModel is a high-level wrapper around the core RAGSystem implementation
+    - It configures RAGSystem with appropriate settings for the user's environment
+    - It handles application-specific concerns like configuration and error handling
+    - The core RAG functionality is delegated to the RAGSystem class in src/veritas/rag.py
+    """
     
     def __init__(self, config: ModelConfig):
-        """Initialize the model with configuration."""
+        """
+        Initialize the model with configuration.
+        
+        Args:
+            config: Configuration for the model including parameters 
+                   that will be passed to the underlying RAGSystem
+        """
         self.config = config
         self.rag_system = None
         
@@ -93,7 +112,13 @@ class MistralModel:
             torch.set_num_threads(self.config.num_threads)
     
     def load(self):
-        """Load the model and tokenizer using RAGSystem."""
+        """
+        Load the model and tokenizer using RAGSystem.
+        
+        This method creates a RAGSystem instance configured with the
+        parameters from this class's ModelConfig, then exposes the
+        RAGSystem's model, tokenizer, and generator for compatibility.
+        """
         try:
             logger.info(f"Loading model {self.config.model_name}...")
             
@@ -119,46 +144,31 @@ class MistralModel:
             raise
     
     def get_retrieval_context(self, prompt: str) -> str:
-        """Get relevant context for the prompt from the RAG system."""
+        """
+        Get relevant context for the prompt from the RAG system.
+        
+        This is a wrapper method that delegates to RAGSystem.get_retrieval_context
+        while handling Veritas-specific concerns like directory setup and error logging.
+        
+        Args:
+            prompt: The user's query or prompt
+            
+        Returns:
+            Relevant context extracted from the knowledge base
+        """
         try:
             # Ensure directories exist
             Config.ensure_dirs()
             
-            # Use the absolute path to the index directory
-            index_path = os.path.abspath(os.path.join(Config.MODELS_DIR, "faiss"))
-            logger.info(f"Using index path: {index_path}")
+            # Log the operation
+            logger.info(f"Getting retrieval context for: {prompt[:50]}...")
             
-            # Check if index exists with detailed logging
-            index_file = os.path.join(index_path, "index.faiss")
-            chunks_file = os.path.join(index_path, "chunks.json")
+            # Use the centralized method from RAGSystem
+            context, _ = self.rag_system.get_retrieval_context(
+                prompt, 
+                top_k=self.config.max_retrieved_chunks
+            )
             
-            logger.info(f"Checking for index file: {index_file} (exists: {os.path.exists(index_file)})")
-            logger.info(f"Checking for chunks file: {chunks_file} (exists: {os.path.exists(chunks_file)})")
-            
-            if not os.path.exists(index_file):
-                return "FAISS index file not found at: " + index_file
-            
-            if not os.path.exists(chunks_file):
-                return "Chunks file not found at: " + chunks_file
-            
-            # If RAGSystem doesn't have an index yet, load it
-            if not self.rag_system.index:
-                self.rag_system.load_index(index_path)
-            
-            # Log retrieval attempt
-            logger.info(f"Retrieving context for: {prompt[:50]}...")
-            
-            # Retrieve chunks with the RAGSystem
-            results = self.rag_system.retrieve(prompt, top_k=self.config.max_retrieved_chunks)
-            
-            if not results:
-                return "No relevant context found in the knowledge base for this query."
-            
-            # Log successful retrieval
-            logger.info(f"Successfully retrieved {len(results)} chunks")
-            
-            # Combine retrieved chunks into context
-            context = "\n\n".join([result["chunk"] for result in results])
             return context
             
         except Exception as e:
@@ -168,68 +178,33 @@ class MistralModel:
             return f"Error retrieving context: {str(e)}"
     
     def generate(self, prompt: str) -> tuple[str, str, str]:
-        """Generate text from prompt with high-performance settings."""
+        """
+        Generate text from prompt with high-performance settings.
+        
+        This method delegates to the RAGSystem.generate_rag_response method
+        while handling Veritas-specific concerns like error handling and memory cleanup.
+        
+        Args:
+            prompt: The user's query or prompt
+            
+        Returns:
+            Tuple of (retrieved context, direct response, context-augmented response)
+        """
         if not self.rag_system or not self.model or not self.tokenizer:
             raise RuntimeError("Model not loaded. Call load() first.")
         
         try:
-            # Get context from RAG with optimized settings
-            context = self.get_retrieval_context(prompt)
-            
-            # Memory cleanup before generation
-            if self.config.device == "mps":
-                clear_mps_cache()
-            
-            # Generate direct answer without context
-            direct_prompt = f"Question: {prompt}\n\nAnswer:"
-            direct_response = self.rag_system.generate(
-                direct_prompt,
+            # Use the centralized method for complete RAG response
+            result = self.rag_system.generate_rag_response(
+                query=prompt,
+                top_k=self.config.max_retrieved_chunks,
                 max_new_tokens=self.config.max_new_tokens,
                 temperature=self.config.temperature,
-                top_p=self.config.top_p
+                top_p=self.config.top_p,
+                max_context_chars=3000  # Hard limit for M4 optimization
             )
             
-            # Process context to reduce its size if needed
-            if len(context) > 4000:
-                logger.info(f"Context is large ({len(context)} chars), chunking for better memory management")
-                
-                # More aggressive chunking to ensure we don't overwhelm the model
-                # Extract the most relevant paragraphs (up to 3000 chars)
-                paragraphs = context.split("\n\n")
-                
-                # Take first paragraph (usually most relevant), then sample from the rest
-                selected_text = paragraphs[0] if paragraphs else ""
-                
-                # If we have multiple paragraphs, select some from throughout the text
-                if len(paragraphs) > 1:
-                    # Take evenly spaced samples from the document
-                    sample_count = min(5, len(paragraphs) - 1)
-                    sample_indices = [int(i * (len(paragraphs) - 1) / sample_count) for i in range(1, sample_count + 1)]
-                    
-                    for idx in sample_indices:
-                        if len(selected_text) < 3000 and idx < len(paragraphs):
-                            selected_text += "\n\n" + paragraphs[idx]
-                
-                context = selected_text[:3000]  # Hard limit at 3000 chars
-                logger.info(f"Reduced context to {len(context)} chars")
-            
-            # Generate combined response with context
-            combined_prompt = f"""You are a helpful AI assistant. Use the following context to answer the user's question.
-
-Context: {context}
-
-Question: {prompt}
-
-Answer:"""
-            
-            combined_response = self.rag_system.generate(
-                combined_prompt,
-                max_new_tokens=self.config.max_new_tokens,
-                temperature=self.config.temperature,
-                top_p=self.config.top_p
-            )
-            
-            return context, direct_response, combined_response
+            return result["context"], result["direct_response"], result["combined_response"]
             
         except Exception as e:
             logger.error(f"Error in generate: {str(e)}")
