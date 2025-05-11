@@ -12,6 +12,7 @@ import torch
 import logging
 import os
 from typing import Any, Dict, Optional
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +59,10 @@ def set_mps_memory_limit(memory_limit_mb: int) -> bool:
             logger.info(f"Set MPS memory fraction to {fraction:.2f}")
             return True
         else:
-            # Try environment variable as fallback
-            memory_limit_gb = memory_limit_mb / 1024
-            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Disable automatic growth
-            os.environ["PYTORCH_MPS_MEMORY_LIMIT"] = f"{memory_limit_gb}GB"
-            logger.info(f"Set MPS memory limit via environment variables: {memory_limit_gb}GB")
+            # Use centralized config settings
+            Config.MEMORY_LIMIT_GB = memory_limit_mb / 1024
+            Config.setup_environment()  # Apply settings through centralized method
+            logger.info(f"Set MPS memory limit via environment variables: {Config.MEMORY_LIMIT_GB}GB")
             return True
     except Exception as e:
         logger.warning(f"Failed to set MPS memory limit: {e}")
@@ -72,8 +72,12 @@ def optimize_for_mps(obj: Any) -> Any:
     """
     Apply MPS-specific optimizations to an object
     
+    This function handles runtime operations like converting models to
+    half precision and moving them to the MPS device. These are operations
+    that need to happen during execution, not just configuration settings.
+    
     Args:
-        obj: Object to optimize
+        obj: Object to optimize (typically a model)
         
     Returns:
         Optimized object
@@ -108,19 +112,37 @@ def optimize_for_mps(obj: Any) -> Any:
         logger.warning(f"Failed to optimize for MPS: {e}")
         return obj
 
+def clear_mps_cache() -> None:
+    """
+    Clear MPS memory cache to free up resources
+    
+    This is a runtime operation that should be called when memory
+    usage gets high during model execution.
+    """
+    if is_mps_available():
+        try:
+            torch.mps.empty_cache()
+            logger.info("Cleared MPS cache")
+        except Exception as e:
+            logger.warning(f"Failed to clear MPS cache: {e}")
+
 def optimize_memory_for_m4() -> None:
     """
     Apply memory optimizations for M4 Mac
+    
+    This function coordinates both environment settings (via Config)
+    and runtime operations for optimal M4 performance.
     """
-    # Set PyTorch memory management options
+    # Apply environment variable settings using centralized Config
     if is_mps_available():
-        # Disable automatic growth
-        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+        # Update Config with M4-specific settings
+        Config.MEMORY_LIMIT_GB = 102  # 80% of 128GB
+        Config.CPU_THREADS = 4  # Optimal thread count for M4
         
-        # Set MPS memory limit to 80% of system RAM
-        os.environ["PYTORCH_MPS_MEMORY_LIMIT"] = "102GB"  # 80% of 128GB
+        # Apply the updated settings
+        Config.setup_environment()
         
-        # Other Apple-specific optimizations
-        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        # Also perform runtime cleanup if needed
+        clear_mps_cache()
         
         logger.info("Applied memory optimizations for M4 Mac") 

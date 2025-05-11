@@ -28,6 +28,7 @@ from transformers import pipeline
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 from src.veritas.config import Config, get_device
+from src.veritas.mps_utils import is_mps_available, clear_mps_cache, optimize_memory_for_m4
 
 # Configure logging
 logging.basicConfig(
@@ -40,27 +41,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create temporary directory on SSD with absolute path
-SSD_TEMP_DIR = "/Volumes/8SSD/veritas/tmp"
-os.makedirs(SSD_TEMP_DIR, exist_ok=True)
-logger.info(f"Using temporary directory: {SSD_TEMP_DIR}")
+# Create directories if they don't exist and setup environment
+Config.ensure_dirs()
 
-# Set environment variables to limit resource usage - Optimized for M4 Mac with 128GB RAM
-os.environ.update({
-    'OMP_NUM_THREADS': '4',  # Allow more OpenMP threads for M4
-    'MKL_NUM_THREADS': '4',  # Allow more MKL threads for M4
-    'NUMEXPR_NUM_THREADS': '4',  # Allow more NumExpr threads for M4
-    'TOKENIZERS_PARALLELISM': 'true',  # Enable tokenizer parallelism for speed
-    'PYTORCH_MPS_HIGH_WATERMARK_RATIO': '0.0',  # Disable upper limit to prevent OOM
-    'PYTORCH_MPS_LOW_WATERMARK_RATIO': '0.6',  # Keep more in memory
-    'PYTORCH_MPS_MEMORY_LIMIT': '100GB',  # Use more of available RAM
-    'PYTORCH_ENABLE_MPS_FALLBACK': '1',  # Enable fallback
-    'TRANSFORMERS_NO_ADVISORY_WARNINGS': '1',  # Reduce warnings
-    'TMPDIR': SSD_TEMP_DIR,  # Set temp directory to SSD instead of Macintosh HD
-    'TORCH_HOME': os.path.join(SSD_TEMP_DIR, 'torch'),  # Store PyTorch cache on SSD
-    'TRANSFORMERS_CACHE': os.path.join(SSD_TEMP_DIR, 'transformers'),  # Store Transformers cache on SSD
-    'HF_HOME': os.path.join(SSD_TEMP_DIR, 'huggingface'),  # Store HuggingFace cache on SSD
-})
+# Apply comprehensive M4 optimizations (both environment and runtime)
+optimize_memory_for_m4()
 
 # Set process priority at the start
 p = psutil.Process(os.getpid())
@@ -90,7 +75,7 @@ class ModelConfig:
     # M4-specific optimizations
     torch_dtype: torch.dtype = torch.float16  # Use float16 for better performance
     use_cache: bool = True
-    num_threads: int = 8  # Use more threads for M4
+    num_threads: int = Config.CPU_THREADS  # Use centralized configuration
     batch_size: int = 1
     max_context_length: int = 1024  # Reduced context length for memory efficiency
     max_retrieved_chunks: int = 2  # Further reduced for better memory efficiency
@@ -147,7 +132,7 @@ class MistralModel:
             logger.info("Model loaded successfully")
             # Force memory cleanup after loading
             if self.config.device == "mps":
-                torch.mps.empty_cache()
+                clear_mps_cache()
             
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
@@ -218,7 +203,7 @@ class MistralModel:
             
             # Memory cleanup before generation
             if self.config.device == "mps":
-                torch.mps.empty_cache()
+                clear_mps_cache()
             
             # Generate direct answer without context
             direct_prompt = f"Question: {prompt}\n\nAnswer:"
@@ -237,7 +222,7 @@ class MistralModel:
             
             # Memory cleanup between generations
             if self.config.device == "mps":
-                torch.mps.empty_cache()
+                clear_mps_cache()
             
             # Process context to reduce its size if needed
             if len(context) > 4000:
@@ -291,7 +276,7 @@ Answer:"""
             logger.error(f"Error in generate: {str(e)}")
             # Force memory cleanup on error
             if self.config.device == "mps":
-                torch.mps.empty_cache()
+                clear_mps_cache()
             elif self.config.device == "cuda":
                 torch.cuda.empty_cache()
             raise
@@ -322,7 +307,7 @@ class TerminalUI:
                     print("Forcing garbage collection...")
                     gc.collect()
                     if self.model.config.device == "mps":
-                        torch.mps.empty_cache()
+                        clear_mps_cache()
                     print("Memory cleaned.")
                     continue
                 
@@ -384,7 +369,7 @@ def run_model(
         # Clean memory before loading
         gc.collect()
         if model_config.device == "mps":
-            torch.mps.empty_cache()
+            clear_mps_cache()
             
         model.load()
         
@@ -399,7 +384,7 @@ def run_model(
         # Final cleanup
         gc.collect()
         if model_config and model_config.device == "mps":
-            torch.mps.empty_cache()
+            clear_mps_cache()
 
 if __name__ == "__main__":
     import argparse

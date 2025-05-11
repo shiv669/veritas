@@ -41,18 +41,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 import argparse
 
-# Set memory optimization environment variables before importing PyTorch-related modules
-os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Disable automatic growth
-os.environ["PYTORCH_MPS_MEMORY_LIMIT"] = "102GB"  # 80% of 128GB
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-# Add the project root to Python path to allow imports from src
+# Set memory optimization environment variables using centralized configuration
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.veritas.rag import RAGSystem
 from src.veritas.config import Config
 from src.veritas.utils import setup_logging
 from src.veritas.mps_utils import is_mps_available, optimize_for_mps, optimize_memory_for_m4
+
+# Setup environment variables using the centralized configuration
+Config.ensure_dirs()
+Config.setup_environment()
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Index chunks for RAG system")
