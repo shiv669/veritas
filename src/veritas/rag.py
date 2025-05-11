@@ -17,6 +17,7 @@ from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, pipelin
 from sentence_transformers import SentenceTransformer
 from .config import Config, get_device
 from .utils import setup_logging
+from .mps_utils import is_mps_available, clear_mps_cache, optimize_for_mps
 
 logger = setup_logging(__name__)
 
@@ -47,29 +48,53 @@ class RAGSystem:
         self.device = device or get_device()
         logger.info(f"Using device: {self.device}")
         
-        # Load embedding model
+        # Load embedding model with standardized approach
         self.embedding_model_name = embedding_model or Config.EMBEDDING_MODEL
         logger.info(f"Loading embedding model: {self.embedding_model_name}")
-        self.embedding_model = SentenceTransformer(self.embedding_model_name, device=self.device)
+        self.embedding_model = SentenceTransformer(
+            self.embedding_model_name,
+            device=self.device,
+            cache_folder=os.environ.get('TRANSFORMERS_CACHE')  # Use centralized SSD cache
+        )
         
-        # Load LLM
+        # Load LLM with unified approach (same as run.py)
         self.llm_model_name = llm_model or Config.LLM_MODEL
         logger.info(f"Loading language model: {self.llm_model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(self.llm_model_name, torch_dtype=torch.float16)
         
-        if self.device == "cuda":
-            self.model = self.model.cuda()
-        elif self.device == "mps":
-            self.model = self.model.to("mps")
-            
-        # Setup generation pipeline
+        # Load tokenizer with efficient settings
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.llm_model_name,
+            trust_remote_code=True,
+            use_fast=True,  # Use fast tokenizer when available
+            padding_side="left",  # More efficient for generation
+            cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
+        )
+        
+        # Load model directly with full precision (no legacy quantization attempts)
+        logger.info("Loading model with full precision...")
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.llm_model_name,
+            torch_dtype=torch.float16,  # Use float16 for better performance
+            device_map="auto",  # Automatic device mapping
+            trust_remote_code=True,
+            use_cache=True,  # Enable KV caching for faster generation
+            cache_dir=os.environ.get('TRANSFORMERS_CACHE')  # Use SSD cache
+        )
+        
+        # Setup generation pipeline with efficient config
         self.generator = pipeline(
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            device=0 if self.device == "cuda" else -1
+            device_map="auto",
+            torch_dtype=torch.float16,
+            batch_size=1
         )
+        
+        # Apply MPS-specific optimizations if on Apple Silicon
+        if self.device == "mps":
+            self = optimize_for_mps(self)
+            clear_mps_cache()
         
         # Load FAISS index if provided
         self.index = None
@@ -166,7 +191,7 @@ class RAGSystem:
         return results
     
     def generate(self, prompt: str, 
-                 max_new_tokens: int = 512, 
+                 max_new_tokens: int = 200,  # Reduced for better memory efficiency
                  temperature: float = 0.7,
                  top_p: float = 0.9) -> str:
         """
@@ -181,14 +206,26 @@ class RAGSystem:
         Returns:
             Generated text
         """
-        result = self.generator(
-            prompt,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            num_return_sequences=1
-        )
+        # Clear MPS cache before generation if using Apple Silicon
+        if self.device == "mps":
+            clear_mps_cache()
+            
+        with torch.inference_mode():
+            result = self.generator(
+                prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                repetition_penalty=1.1,  # Added to improve response quality
+                do_sample=True,
+                num_return_sequences=1,
+                pad_token_id=self.tokenizer.eos_token_id
+            )
         
+        # Clear MPS cache after generation if using Apple Silicon
+        if self.device == "mps":
+            clear_mps_cache()
+            
         return result[0]["generated_text"][len(prompt):]
 
 
