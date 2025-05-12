@@ -9,6 +9,7 @@ Architecture Overview:
 - This script defines MistralModel, which serves as a wrapper around the core RAGSystem
 - MistralModel configures RAGSystem with appropriate settings for the user's environment
 - The relationship is: MistralModel (wrapper, this file) -> RAGSystem (core implementation, in rag.py)
+- Now also includes the AI Scientist component for research tasks
 """
 
 import json
@@ -28,6 +29,8 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
+import subprocess
+import time
 
 # Get the absolute path to the project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,6 +68,11 @@ class DeploymentMode(Enum):
     LOCAL = "local"
     API = "api"
     DOCKER = "docker"
+
+class SystemMode(Enum):
+    """Supported system modes."""
+    RAG = "rag"
+    AI_SCIENTIST = "ai_scientist"
 
 @dataclass
 class ModelConfig:
@@ -215,19 +223,94 @@ class MistralModel:
             # Let the exception propagate
             raise
 
+class AIScientistInterface:
+    """Interface for the AI Scientist component."""
+    
+    def __init__(self):
+        self.ai_scientist_path = os.path.join(PROJECT_ROOT, "src/veritas/ai_scientist")
+        self.setup_paths()
+    
+    def setup_paths(self):
+        """Set up Python paths for AI Scientist."""
+        veritas_path = PROJECT_ROOT
+        templates_path = os.path.join(PROJECT_ROOT, "models", "Cognition")
+        
+        # Add to Python path if not already there
+        if veritas_path not in sys.path:
+            sys.path.insert(0, veritas_path)
+        if templates_path not in sys.path:
+            sys.path.insert(0, templates_path)
+    
+    def list_available_templates(self):
+        """List available research templates."""
+        templates_dir = os.path.join(PROJECT_ROOT, "models", "Cognition", "templates")
+        templates = []
+        
+        try:
+            templates = [d for d in os.listdir(templates_dir) 
+                        if os.path.isdir(os.path.join(templates_dir, d))]
+        except Exception as e:
+            logger.error(f"Error listing templates: {e}")
+            templates = ["nanoGPT_lite"]  # fallback
+        
+        return templates
+    
+    def run_interactive(self):
+        """Run the AI Scientist in interactive mode."""
+        script_path = os.path.join(self.ai_scientist_path, "run_interface.py")
+        result = subprocess.run([sys.executable, script_path], check=False)
+        return result.returncode == 0
+    
+    def run_simple_test(self):
+        """Run the simple test script."""
+        print("Running simple test mode...")
+        script_path = os.path.join(self.ai_scientist_path, "test_simple.py")
+        result = subprocess.run([sys.executable, script_path], check=False)
+        return result.returncode == 0
+    
+    def run_with_params(self, mode, experiment, num_ideas):
+        """Run the AI Scientist with specific parameters."""
+        print(f"Running {mode} mode for {experiment}, generating {num_ideas} idea(s)...")
+        script_path = os.path.join(self.ai_scientist_path, "run_scientist.py")
+        
+        cmd = [
+            sys.executable, 
+            script_path, 
+            "--phase", "idea", 
+            "--experiment", experiment, 
+            "--num-ideas", str(num_ideas)
+        ]
+        
+        if mode == "direct":
+            cmd.append("--use-direct-implementation")
+            
+        result = subprocess.run(cmd, check=False)
+        return result.returncode == 0
+
 class TerminalUI:
     """High-performance terminal-based user interface."""
     
     def __init__(self, model: MistralModel):
         self.model = model
+        self.ai_scientist = AIScientistInterface()
     
-    def run(self, host: str = "0.0.0.0", port: int = None):
+    def run(self, mode: SystemMode = SystemMode.RAG, host: str = "0.0.0.0", port: int = None):
         """Run the terminal interface."""
+        if mode == SystemMode.RAG:
+            self.run_rag_interface()
+        elif mode == SystemMode.AI_SCIENTIST:
+            self.run_ai_scientist_interface()
+        else:
+            print(f"Unknown mode: {mode}")
+    
+    def run_rag_interface(self):
+        """Run the RAG terminal interface."""
         print("\n" + "="*70)
         print("  MISTRAL RAG SYSTEM - OPTIMIZED FOR M4 MAX (128GB RAM)")
         print("="*70 + "\n")
         print("Type 'exit' or 'quit' to end the session.")
         print("Type 'gc' to force garbage collection if needed.")
+        print("Type 'scientist' to switch to AI Scientist mode.")
         print("\n")
         
         while True:
@@ -236,6 +319,18 @@ class TerminalUI:
                 
                 if prompt.lower() in ['exit', 'quit']:
                     break
+                
+                if prompt.lower() == 'scientist':
+                    self.run_ai_scientist_interface()
+                    # After returning from AI Scientist mode, show the RAG welcome message again
+                    print("\n" + "="*70)
+                    print("  MISTRAL RAG SYSTEM - OPTIMIZED FOR M4 MAX (128GB RAM)")
+                    print("="*70 + "\n")
+                    print("Type 'exit' or 'quit' to end the session.")
+                    print("Type 'gc' to force garbage collection if needed.")
+                    print("Type 'scientist' to switch to AI Scientist mode.")
+                    print("\n")
+                    continue
                     
                 if prompt.lower() == 'gc':
                     print("Forcing garbage collection...")
@@ -248,109 +343,259 @@ class TerminalUI:
                 if not prompt:
                     continue
                 
-                # Process the prompt
-                print("\n⏳ Processing query (using high-performance settings)...\n")
+                print("\nGenerating response...")
+                start_time = time.time()
+                
+                # Get the context from the RAG system
+                context = self.model.get_retrieval_context(prompt)
+                
+                # Generate the direct and combined responses
                 context, direct_response, combined_response = self.model.generate(prompt)
                 
-                # Display all three parts with nice formatting
+                elapsed_time = time.time() - start_time
+                
+                # Display responses in a formatted way
                 print("\n" + "="*70)
-                print("  1. RETRIEVED CONTEXT")
+                print("  RETRIEVED CONTEXT")
                 print("="*70)
-                print(context)
+                print(context or "No relevant context found.")
                 
                 print("\n" + "="*70)
-                print("  2. MISTRAL'S DIRECT ANSWER")
+                print("  DIRECT RESPONSE")
                 print("="*70)
                 print(direct_response)
                 
                 print("\n" + "="*70)
-                print("  3. FINAL RESPONSE (CONTEXT + QUERY)")
+                print("  COMBINED RESPONSE")
                 print("="*70)
                 print(combined_response)
-                print("="*70 + "\n")
+                
+                print(f"\nGenerated in {elapsed_time:.2f} seconds.")
+                
+                # Force memory cleanup after generation
+                if self.model.config.device == "mps":
+                    clear_mps_cache()
                 
             except KeyboardInterrupt:
-                print("\n\nExiting...")
+                print("\nInterrupted by user. Exiting...")
                 break
+                
             except Exception as e:
-                print(f"\n❌ Error: {str(e)}")
-                # Provide option to continue after error
-                if input("\nContinue? (y/n): ").lower() != 'y':
+                import traceback
+                print(f"Error: {str(e)}")
+                logger.error(f"Error: {str(e)}")
+                logger.error(traceback.format_exc())
+                
+                # Force memory cleanup on error
+                if self.model.config.device == "mps":
+                    clear_mps_cache()
+    
+    def run_ai_scientist_interface(self):
+        """Run the AI Scientist interface."""
+        print("\n" + "="*70)
+        print("  VERITAS AI SCIENTIST - RESEARCH ASSISTANT")
+        print("="*70 + "\n")
+        print("Select a mode to run:")
+        print("  1. Interactive Mode (Guided UI)")
+        print("  2. Simple Test (Quick Demo)")
+        print("  3. Run with Parameters (Advanced)")
+        print("  4. Back to RAG System")
+        print("\n")
+        
+        while True:
+            try:
+                choice = input("\nSelect mode (1-4): ").strip()
+                
+                if choice == '1':
+                    print("\nLaunching interactive mode...")
+                    self.ai_scientist.run_interactive()
                     break
+                
+                elif choice == '2':
+                    print("\nRunning simple test...")
+                    self.ai_scientist.run_simple_test()
+                    break
+                
+                elif choice == '3':
+                    # List available templates
+                    templates = self.ai_scientist.list_available_templates()
+                    print("\nAvailable research templates:")
+                    for i, template in enumerate(templates, 1):
+                        print(f"  {i}. {template}")
+                    
+                    # Select template
+                    while True:
+                        try:
+                            choice = input(f"\nSelect template (1-{len(templates)}) [default: 1]: ")
+                            if not choice:
+                                template_idx = 0
+                                break
+                            
+                            template_idx = int(choice) - 1
+                            if 0 <= template_idx < len(templates):
+                                break
+                            else:
+                                print(f"Please enter a number between 1 and {len(templates)}.")
+                        except ValueError:
+                            print("Please enter a valid number.")
+                    
+                    experiment = templates[template_idx]
+                    
+                    # Select number of ideas
+                    while True:
+                        try:
+                            choice = input("\nNumber of ideas to generate (1-5) [default: 1]: ")
+                            if not choice:
+                                num_ideas = 1
+                                break
+                            
+                            num_ideas = int(choice)
+                            if 1 <= num_ideas <= 5:
+                                break
+                            else:
+                                print("Please enter a number between 1 and 5.")
+                        except ValueError:
+                            print("Please enter a valid number.")
+                    
+                    # Select implementation
+                    print("\nSelect implementation:")
+                    print("  1. Optimized (recommended)")
+                    print("  2. Comprehensive (in-depth)")
+                    
+                    impl_choice = input("\nSelect implementation (1-2) [default: 1]: ")
+                    mode = "direct" if not impl_choice or impl_choice == "1" else "full"
+                    
+                    self.ai_scientist.run_with_params(mode, experiment, num_ideas)
+                    break
+                    
+                elif choice == '4':
+                    print("\nReturning to RAG System...")
+                    return
+                
+                else:
+                    print("Invalid choice. Please enter a number between 1 and 4.")
+                
+            except KeyboardInterrupt:
+                print("\nInterrupted by user. Returning to RAG System...")
+                return
+                
+            except Exception as e:
+                import traceback
+                print(f"Error: {str(e)}")
+                logger.error(f"Error: {str(e)}")
+                logger.error(traceback.format_exc())
 
 def run_model(
     ui_framework: UIFramework,
     deployment_mode: DeploymentMode,
+    system_mode: SystemMode = SystemMode.RAG,
     model_config: Optional[ModelConfig] = None,
     host: str = "0.0.0.0",
     port: Optional[int] = None
 ) -> None:
     """
-    Run the Mistral model with the terminal UI.
+    Run the Mistral model with the specified UI framework and deployment mode.
     
     Args:
-        ui_framework: UI framework to use (only TERMINAL is supported)
-        deployment_mode: Deployment mode
-        model_config: Model configuration
-        host: Host to bind to (not used for terminal UI)
-        port: Port to bind to (not used for terminal UI)
+        ui_framework: The UI framework to use
+        deployment_mode: The deployment mode
+        system_mode: The system mode (RAG or AI Scientist)
+        model_config: Configuration for the model
+        host: The host to bind to
+        port: The port to bind to
     """
+    if model_config is None:
+        model_config = ModelConfig()
+    
+    if system_mode == SystemMode.AI_SCIENTIST:
+        # For AI Scientist mode, we can skip loading the model
+        # and directly launch the AI Scientist interface
+        if ui_framework == UIFramework.TERMINAL:
+            # Create a temporary UI with a placeholder model
+            # This is a bit of a hack, but it allows us to reuse the existing UI code
+            ui = TerminalUI(MistralModel(model_config))
+            ui.run_ai_scientist_interface()
+        else:
+            raise ValueError(f"Unsupported UI framework for AI Scientist: {ui_framework}")
+        return
+    
+    # Only load the model for RAG mode
+    model = MistralModel(model_config)
+    
     try:
-        # Initialize model
-        model_config = model_config or ModelConfig()
-        model = MistralModel(model_config)
-        
-        # Clean memory before loading
-        gc.collect()
-        if model_config.device == "mps":
-            clear_mps_cache()
-            
+        # Load the model
+        logger.info("Loading model...")
         model.load()
+        logger.info("Model loaded successfully.")
         
-        # Only terminal UI is supported
-        if ui_framework != UIFramework.TERMINAL:
-            logger.warning(f"Unsupported UI framework: {ui_framework}. Using Terminal UI instead.")
-            
-        ui = TerminalUI(model)
-        ui.run()
+        # Run with the specified UI framework and deployment mode
+        if ui_framework == UIFramework.TERMINAL:
+            ui = TerminalUI(model)
+            ui.run(system_mode, host, port)
+        else:
+            raise ValueError(f"Unsupported UI framework: {ui_framework}")
+    
     except Exception as e:
-        logger.error(f"Error in run_model: {str(e)}")
-        # Final cleanup
-        gc.collect()
-        if model_config and model_config.device == "mps":
-            clear_mps_cache()
+        import traceback
+        logger.error(f"Failed to run model: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
 
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Run Mistral model")
-    parser.add_argument("--ui-framework", type=str,
-                      choices=[f.value for f in UIFramework],
-                      default=UIFramework.TERMINAL.value,
-                      help="UI framework to use")
-    parser.add_argument("--deployment-mode", type=str,
-                      choices=[m.value for m in DeploymentMode],
-                      default=DeploymentMode.LOCAL.value,
-                      help="Deployment mode")
-    parser.add_argument("--model-name", type=str,
-                      default=Config.LLM_MODEL,
-                      help="Name of the model to use")
-    parser.add_argument("--host", type=str,
-                      default="0.0.0.0",
-                      help="Host to bind to (not used for terminal UI)")
-    parser.add_argument("--port", type=int,
-                      help="Port to bind to (not used for terminal UI)")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Run Mistral model.")
+    parser.add_argument(
+        "--ui", 
+        type=str, 
+        default="terminal", 
+        choices=["terminal"],
+        help="UI framework to use"
+    )
+    parser.add_argument(
+        "--mode", 
+        type=str, 
+        default="local", 
+        choices=["local", "api", "docker"],
+        help="Deployment mode"
+    )
+    parser.add_argument(
+        "--system", 
+        type=str, 
+        default="rag", 
+        choices=["rag", "ai_scientist"],
+        help="System mode to use (RAG or AI Scientist)"
+    )
+    parser.add_argument(
+        "--host", 
+        type=str, 
+        default="0.0.0.0",
+        help="Host to bind to"
+    )
+    parser.add_argument(
+        "--port", 
+        type=int, 
+        default=None,
+        help="Port to bind to (for API mode)"
+    )
     
     args = parser.parse_args()
     
-    # Create model config
-    model_config = ModelConfig(model_name=args.model_name)
+    # Convert string arguments to enum values
+    ui_framework = UIFramework(args.ui)
+    deployment_mode = DeploymentMode(args.mode)
+    system_mode = SystemMode(args.system)
     
-    # Run model with terminal UI
-    run_model(
-        UIFramework(args.ui_framework),
-        DeploymentMode(args.deployment_mode),
-        model_config,
-        args.host,
-        args.port
-    )
+    try:
+        # Run the model
+        run_model(
+            ui_framework=ui_framework,
+            deployment_mode=deployment_mode,
+            system_mode=system_mode,
+            host=args.host,
+            port=args.port
+        )
+    except Exception as e:
+        logger.error(f"Failed to run model: {str(e)}")
+        sys.exit(1)
