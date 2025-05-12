@@ -23,11 +23,32 @@ The fastest way to get started with Veritas is to use our unified installation s
 git clone https://github.com/yourusername/veritas.git
 cd veritas
 
-# Run the unified installation script
+# Run the basic installation
 python install.py
 
 # To also download the Mistral model (optional, 13GB+)
 python install.py --download-model
+```
+
+#### Advanced Installation Options
+
+The installation script provides several options to customize your setup:
+
+```bash
+# Upgrade existing dependencies
+python install.py --upgrade
+
+# Continue installation even if some steps fail
+python install.py --ignore-errors
+
+# Skip dependency installation (useful for development)
+python install.py --skip-dependencies
+
+# Specify a different model to download
+python install.py --download-model --model "mistralai/Mistral-7B-v0.2"
+
+# See all available options
+python install.py --help
 ```
 
 The installation script will:
@@ -185,5 +206,6 @@ For more advanced usage, see the [AI Scientist documentation](AI_SCIENTIST.md).
 - **Empty responses**: Check that your documents were properly processed
 - **Template errors**: Verify that the template path is correct in your configuration
 - **Installation errors**: Make sure you're using Python 3.9 or higher and have sufficient permissions
+- **Dependency errors**: Try running with `--ignore-errors` or check specific package compatibility
 
 Need more help? Check the [README.md](../README.md) or open an issue on GitHub! 

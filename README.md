@@ -29,11 +29,17 @@ We provide a unified installation script that handles everything for you:
 git clone https://github.com/yourusername/veritas.git
 cd veritas
 
-# Run the unified installation script
+# Basic installation
 python install.py
 
 # To also download the Mistral model (optional, 13GB+)
 python install.py --download-model
+
+# More installation options
+python install.py --upgrade                 # Upgrade existing dependencies
+python install.py --ignore-errors           # Continue even if some steps fail
+python install.py --skip-dependencies       # Skip installing dependencies
+python install.py --model "mistralai/Mistral-7B-v0.2"  # Specify model to download
 ```
 
 The installation script:
@@ -50,6 +56,9 @@ veritas
 
 # Use AI Scientist directly
 veritas-ai-scientist
+
+# See all available options
+veritas --help
 ```
 
 ### Manual Installation

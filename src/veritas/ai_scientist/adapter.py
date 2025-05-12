@@ -7,31 +7,32 @@ to work with Mistral models via the RAG system.
 
 import os
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, TypeVar, Type, Callable
 import gc
 import torch
 
-# Import from Veritas
-from src.veritas.rag import RAGSystem
-from src.veritas.config import Config, get_device
-from src.veritas.mps_utils import clear_mps_cache
+# Import from Veritas - use relative imports for better type checking
+from veritas.rag import RAGSystem
+from veritas.config import Config, get_device
+from veritas.mps_utils import clear_mps_cache
+from veritas.typing import MessageList, MessageRole, MessageContent, Message, JSON
 
 logger = logging.getLogger(__name__)
 
 class ResponseMessage:
     """Simple class for response message objects"""
-    def __init__(self, content):
-        self.content = content
+    def __init__(self, content: str):
+        self.content: str = content
 
 class ResponseChoice:
     """Simple class for response choice objects"""
-    def __init__(self, message_content):
-        self.message = ResponseMessage(message_content)
+    def __init__(self, message_content: str):
+        self.message: ResponseMessage = ResponseMessage(message_content)
 
 class LLMResponse:
     """Simple class for LLM response objects"""
-    def __init__(self, content):
-        self.choices = [ResponseChoice(content)]
+    def __init__(self, content: str):
+        self.choices: List[ResponseChoice] = [ResponseChoice(content)]
 
 class MistralAdapter:
     """
@@ -40,14 +41,14 @@ class MistralAdapter:
     This adapter provides a consistent interface for working with
     the Mistral RAG system.
     """
-    def __init__(self, rag_system=None):
+    def __init__(self, rag_system: Optional[RAGSystem] = None):
         """
         Initialize the adapter with a RAGSystem instance.
         
         Args:
             rag_system: Optional RAGSystem instance. If None, a new one will be created.
         """
-        self.rag_system = rag_system
+        self.rag_system: RAGSystem = rag_system
         if self.rag_system is None:
             logger.info("Creating new RAGSystem instance")
             self.rag_system = RAGSystem(
@@ -55,9 +56,9 @@ class MistralAdapter:
                 llm_model=Config.LLM_MODEL,
                 device=get_device()
             )
-        self.memory_counter = 0  # Counter for managing memory cleanup
+        self.memory_counter: int = 0  # Counter for managing memory cleanup
     
-    def _clean_memory_if_needed(self):
+    def _clean_memory_if_needed(self) -> None:
         """Clean up memory periodically to prevent OOM errors"""
         self.memory_counter += 1
         if self.memory_counter % 10 == 0:  # Every 10 calls
@@ -106,7 +107,7 @@ class MistralAdapter:
                                temperature: float = 0.7,
                                max_tokens: int = 500,
                                n: int = 1,
-                               **kwargs) -> LLMResponse:
+                               **kwargs: Any) -> LLMResponse:
         """
         Generate chat completions with standardized format.
         
@@ -122,14 +123,14 @@ class MistralAdapter:
             A response object with the generated content
         """
         # Extract the query from messages
-        query = self._extract_latest_message(messages)
-        system_msg = self._extract_system_message(messages)
+        query: str = self._extract_latest_message(messages)
+        system_msg: Optional[str] = self._extract_system_message(messages)
         
         # Combine system message with query if exists
-        full_query = f"{system_msg}\n\n{query}" if system_msg else query
+        full_query: str = f"{system_msg}\n\n{query}" if system_msg else query
         
         # Generate response
-        result = self.rag_system.generate_rag_response(
+        result: Dict[str, Any] = self.rag_system.generate_rag_response(
             query=full_query,
             temperature=temperature,
             max_new_tokens=max_tokens,
@@ -149,10 +150,10 @@ class MistralAdapter:
     def generate_message(self, 
                        model: str,
                        messages: List[Dict[str, Union[str, List[Dict[str, str]]]]], 
-                       system: str = None,
+                       system: Optional[str] = None,
                        max_tokens: int = 500,
                        temperature: float = 0.7,
-                       **kwargs) -> LLMResponse:
+                       **kwargs: Any) -> LLMResponse:
         """
         Generate messages with standardized format.
         
@@ -168,7 +169,7 @@ class MistralAdapter:
             A response object with the generated content
         """
         # Extract the query from message format
-        query = ""
+        query: str = ""
         
         # Handle complex message format
         for msg in reversed(messages):
@@ -189,7 +190,7 @@ class MistralAdapter:
             query = f"{system}\n\n{query}"
         
         # Generate response
-        result = self.rag_system.generate_rag_response(
+        result: Dict[str, Any] = self.rag_system.generate_rag_response(
             query=query,
             temperature=temperature,
             max_new_tokens=max_tokens,
@@ -207,15 +208,24 @@ class MistralAdapter:
     messages_create = generate_message
 
 
-def create_mistral_client(model_name=None):
+def create_mistral_client(model_name: Optional[str] = None) -> MistralAdapter:
     """
-    Create a Mistral client for the Veritas AI Scientist.
+    Create a client for the Mistral model.
     
     Args:
-        model_name: Model name (optional)
+        model_name: Optional model name to use
         
     Returns:
-        MistralAdapter instance
+        A MistralAdapter instance
     """
-    logger.info(f"Creating Mistral client (model_name={model_name})")
-    return MistralAdapter() 
+    logger.info("Creating Mistral client")
+    
+    # Create RAG system
+    rag_system = RAGSystem(
+        embedding_model=Config.EMBEDDING_MODEL,
+        llm_model=model_name or Config.LLM_MODEL,
+        device=get_device()
+    )
+    
+    # Create adapter
+    return MistralAdapter(rag_system) 

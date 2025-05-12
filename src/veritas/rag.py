@@ -14,12 +14,13 @@ import os
 import torch
 import faiss
 import numpy as np
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Union, cast
 from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, pipeline
 from sentence_transformers import SentenceTransformer
 from .config import Config, get_device
 from .utils import setup_logging
 from .mps_utils import is_mps_available, clear_mps_cache, optimize_for_mps
+from .typing import ChunkType, ChunkList, QueryType, EmbeddingType, RetrievalResult, ModelOutput
 
 logger = setup_logging(__name__)
 
@@ -39,10 +40,10 @@ class RAGSystem:
     """
     
     def __init__(self, 
-                 embedding_model: str = None,
-                 llm_model: str = None,
-                 index_path: str = None,
-                 device: str = None):
+                 embedding_model: Optional[str] = None,
+                 llm_model: Optional[str] = None,
+                 index_path: Optional[str] = None,
+                 device: Optional[str] = None):
         """
         Sets up the RAG system with all needed components
         
@@ -55,20 +56,20 @@ class RAGSystem:
         Note:
         MistralModel configures these parameters based on user preferences and system constraints.
         """
-        self.device = device or get_device()
+        self.device: str = device or get_device()
         logger.info(f"Using device: {self.device}")
         
         # Load embedding model with standardized approach
-        self.embedding_model_name = embedding_model or Config.EMBEDDING_MODEL
+        self.embedding_model_name: str = embedding_model or Config.EMBEDDING_MODEL
         logger.info(f"Loading embedding model: {self.embedding_model_name}")
-        self.embedding_model = SentenceTransformer(
+        self.embedding_model: SentenceTransformer = SentenceTransformer(
             self.embedding_model_name,
             device=self.device,
             cache_folder=os.environ.get('TRANSFORMERS_CACHE')  # Use centralized SSD cache
         )
         
         # Load LLM with unified approach (same as run.py)
-        self.llm_model_name = llm_model or Config.LLM_MODEL
+        self.llm_model_name: str = llm_model or Config.LLM_MODEL
         logger.info(f"Loading language model: {self.llm_model_name}")
         
         # Load tokenizer with efficient settings
@@ -107,8 +108,8 @@ class RAGSystem:
             clear_mps_cache()
         
         # Load FAISS index if provided
-        self.index = None
-        self.chunks = []
+        self.index: Optional[faiss.Index] = None
+        self.chunks: ChunkList = []
         if index_path:
             self.load_index(index_path)
     
@@ -146,7 +147,7 @@ class RAGSystem:
         else:
             logger.warning(f"Index file not found: {index_file}")
     
-    def embed_query(self, query: str) -> np.ndarray:
+    def embed_query(self, query: QueryType) -> EmbeddingType:
         """
         Embed query using the embedding model
         
@@ -156,9 +157,10 @@ class RAGSystem:
         Returns:
             Query embedding
         """
-        return self.embedding_model.encode(query, normalize_embeddings=True)
+        embedding = self.embedding_model.encode(query, normalize_embeddings=True)
+        return cast(EmbeddingType, embedding)
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: QueryType, top_k: int = 5) -> List[RetrievalResult]:
         """
         Retrieve relevant chunks for the query
         
@@ -182,7 +184,7 @@ class RAGSystem:
         )
         
         # Construct results
-        results = []
+        results: List[RetrievalResult] = []
         for score, idx in zip(scores[0], indices[0]):
             if idx >= 0 and idx < len(self.chunks):
                 chunk = self.chunks[idx]
@@ -200,7 +202,7 @@ class RAGSystem:
         
         return results
     
-    def get_retrieval_context(self, query: str, top_k: int = 5) -> Tuple[str, List[Dict[str, Any]]]:
+    def get_retrieval_context(self, query: QueryType, top_k: int = 5) -> Tuple[str, List[RetrievalResult]]:
         """
         Get relevant context for a query, with detailed error handling
         
@@ -264,172 +266,156 @@ class RAGSystem:
         """
         if len(context) <= max_chars:
             return context
-            
-        logger.info(f"Context is large ({len(context)} chars), chunking for better memory management")
         
-        # Extract the most relevant paragraphs (up to max_chars chars)
-        paragraphs = context.split("\n\n")
-        
-        # Take first paragraph (usually most relevant), then sample from the rest
-        selected_text = paragraphs[0] if paragraphs else ""
-        
-        # If we have multiple paragraphs, select some from throughout the text
-        if len(paragraphs) > 1:
-            # Take evenly spaced samples from the document
-            sample_count = min(5, len(paragraphs) - 1)
-            sample_indices = [int(i * (len(paragraphs) - 1) / sample_count) for i in range(1, sample_count + 1)]
-            
-            for idx in sample_indices:
-                if len(selected_text) < max_chars and idx < len(paragraphs):
-                    selected_text += "\n\n" + paragraphs[idx]
-        
-        result = selected_text[:max_chars]  # Hard limit at max_chars
-        logger.info(f"Reduced context to {len(result)} chars")
-        return result
+        # Simple truncation approach - more sophisticated methods could be used
+        return context[:max_chars] + "..."
     
     def generate(self, prompt: str, 
                  max_new_tokens: int = 200,  # Reduced for better memory efficiency
                  temperature: float = 0.7,
                  top_p: float = 0.9) -> str:
         """
-        Generate text using the language model
+        Generate text from prompt
         
         Args:
-            prompt: Input prompt for generation
-            max_new_tokens: Maximum number of new tokens to generate
-            temperature: Sampling temperature
-            top_p: Nucleus sampling parameter
+            prompt: The prompt to generate from
+            max_new_tokens: Maximum number of tokens to generate
+            temperature: Temperature for generation
+            top_p: Top-p for generation
             
         Returns:
             Generated text
         """
-        # Clear MPS cache before generation if using Apple Silicon
-        if self.device == "mps":
-            clear_mps_cache()
+        try:
+            # Log generation attempt
+            logger.info(f"Generating text for prompt: {prompt[:50]}...")
             
-        with torch.inference_mode():
+            # Generate text
             result = self.generator(
                 prompt,
                 max_new_tokens=max_new_tokens,
+                do_sample=True,
                 temperature=temperature,
                 top_p=top_p,
-                repetition_penalty=1.1,  # Added to improve response quality
-                do_sample=True,
-                num_return_sequences=1,
-                pad_token_id=self.tokenizer.eos_token_id
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
             )
-        
-        # Clear MPS cache after generation if using Apple Silicon
-        if self.device == "mps":
-            clear_mps_cache()
             
-        return result[0]["generated_text"][len(prompt):]
-
+            # Extract generated text
+            generated_text = result[0]['generated_text']
+            
+            # Remove the prompt from the generated text
+            if generated_text.startswith(prompt):
+                generated_text = generated_text[len(prompt):].strip()
+            
+            return str(generated_text)
+            
+        except Exception as e:
+            logger.error(f"Error generating text: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return f"Error generating text: {str(e)}"
+    
     def generate_rag_response(self, 
-                              query: str, 
+                              query: QueryType, 
                               top_k: int = 5, 
                               max_new_tokens: int = 200,
                               temperature: float = 0.7,
                               top_p: float = 0.9,
-                              max_context_chars: int = 3000) -> Dict[str, Any]:
+                              max_context_chars: int = 3000) -> ModelOutput:
         """
-        Generate a complete RAG response with both direct and context-augmented answers
-        
-        This is the core unified method that performs the entire RAG process in one call.
-        It combines context retrieval, processing, and generation into a single workflow.
-        
-        Architectural role:
-        - This is the primary method used by MistralModel.generate()
-        - It's also used by the query_rag utility function
-        - This centralization eliminates code duplication between run.py and rag.py
+        Generate a response using RAG
         
         Args:
-            query: The user's query
+            query: The query to answer
             top_k: Number of chunks to retrieve
-            max_new_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            top_p: Nucleus sampling parameter
-            max_context_chars: Maximum context length in characters
+            max_new_tokens: Maximum number of tokens to generate
+            temperature: Temperature for generation
+            top_p: Top-p for generation
+            max_context_chars: Maximum number of characters for context
             
         Returns:
-            Dictionary with context, direct response, and context-augmented response
+            Dictionary containing the response and related information
         """
-        # Get retrieval context
-        context, retrieved_chunks = self.get_retrieval_context(query, top_k=top_k)
+        try:
+            # Get context
+            context, chunks = self.get_retrieval_context(query, top_k=top_k)
+            
+            # Process context to fit within token limits
+            processed_context = self.process_large_context(context, max_chars=max_context_chars)
         
-        # Generate direct answer (without context)
-        direct_prompt = f"Question: {query}\n\nAnswer:"
-        direct_response = self.generate(
-            direct_prompt,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p
-        )
+            # Generate direct response (without context)
+            direct_prompt = f"USER: {query}\n\nASSISTANT:"
+            direct_response = self.generate(
+                direct_prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p
+            )
         
-        # Process context if it's too large
-        if isinstance(context, str) and len(context) > max_context_chars:
-            context = self.process_large_context(context, max_chars=max_context_chars)
+            # Generate response with context
+            rag_prompt = f"USER: Use the following information to answer the question:\n\nCONTEXT:\n{processed_context}\n\nQUESTION: {query}\n\nASSISTANT:"
+            rag_response = self.generate(
+                rag_prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p
+            )
         
-        # Generate combined response with context
-        combined_prompt = f"""You are a helpful AI assistant. Use the following context to answer the user's question.
+            # Return all information
+            return {
+                "query": query,
+                "context": processed_context,
+                "direct_response": direct_response,
+                "combined_response": rag_response,
+                "chunks": chunks
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating RAG response: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {
+                "query": query,
+                "context": f"Error: {str(e)}",
+                "direct_response": f"Error generating response: {str(e)}",
+                "combined_response": f"Error generating response: {str(e)}",
+                "chunks": []
+            }
 
-Context: {context}
-
-Question: {query}
-
-Answer:"""
-        
-        combined_response = self.generate(
-            combined_prompt,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p
-        )
-        
-        return {
-            "query": query,
-            "context": context,
-            "retrieved_chunks": retrieved_chunks,
-            "direct_response": direct_response,
-            "combined_response": combined_response
-        }
-
-
-def query_rag(query: str, rag_system: RAGSystem = None, top_k: int = 5) -> Dict[str, Any]:
+def query_rag(query: QueryType, rag_system: Optional[RAGSystem] = None, top_k: int = 5) -> ModelOutput:
     """
-    Process a query through the RAG system
+    Query the RAG system
     
-    This function provides a simplified interface for external modules to access the RAG system
-    without needing to interact with the full RAGSystem API. It serves as a convenience function
-    for one-off queries that don't require maintaining a RAGSystem instance.
-    
-    Architectural role:
-    - This is a standalone utility function (not a method of RAGSystem class)
-    - It creates a temporary RAGSystem instance if one is not provided
-    - It uses the more comprehensive RAGSystem.generate_rag_response internally
-    - MistralModel in run.py uses RAGSystem directly for better efficiency and control
+    This is a convenience function for querying the RAG system from other modules.
+    It creates a new RAGSystem instance if one is not provided.
     
     Args:
-        query: The user's query
-        rag_system: RAG system instance or None to create a new one
+        query: The query to answer
+        rag_system: An existing RAGSystem instance (optional)
         top_k: Number of chunks to retrieve
     
     Returns:
-        Dictionary with query results including retrieved chunks and answer
+        Dictionary containing the response and related information
     """
-    # Create RAG system if not provided
-    if rag_system is None:
-        logger.info("Creating new RAG system")
-        index_path = os.path.join(Config.MODELS_DIR, "faiss")
-        logger.info(f"Using index path: {index_path}")
-        rag_system = RAGSystem(index_path=index_path)
+    try:
+        # Create RAGSystem if not provided
+        if rag_system is None:
+            rag_system = RAGSystem()
     
-    # Use the centralized method to get relevant context and generate response
-    result = rag_system.generate_rag_response(query, top_k=top_k)
+        # Generate response
+        return rag_system.generate_rag_response(query, top_k=top_k)
     
-    # For backward compatibility with existing code
-    return {
-        "query": query,
-        "retrieved_chunks": result["retrieved_chunks"],
-        "answer": result["combined_response"]
-    } 
+    except Exception as e:
+        logger.error(f"Error in query_rag: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Return a properly formatted error response
+        return {
+            "query": query,
+            "context": f"Error: {str(e)}",
+            "direct_response": f"Error generating response: {str(e)}",
+            "combined_response": f"Error generating response: {str(e)}",
+            "chunks": []
+        } 

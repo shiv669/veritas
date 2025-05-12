@@ -16,12 +16,12 @@ import json
 import logging
 from pathlib import Path
 import os
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any, Tuple, cast, Type, Set, Callable
 from dataclasses import dataclass
 from enum import Enum
 import sys
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, Pipeline
 import re
 import psutil  # For better process management
 import gc
@@ -37,6 +37,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 from src.veritas.config import Config, get_device
 from src.veritas.mps_utils import is_mps_available, clear_mps_cache, optimize_memory_for_m4
+from src.veritas.typing import ModelOutput, QueryType
 
 # Configure logging
 logging.basicConfig(
@@ -112,14 +113,17 @@ class MistralModel:
             config: Configuration for the model including parameters 
                    that will be passed to the underlying RAGSystem
         """
-        self.config = config
-        self.rag_system = None
+        self.config: ModelConfig = config
+        self.rag_system: Optional[Any] = None
+        self.model: Optional[Any] = None
+        self.tokenizer: Optional[Any] = None
+        self.generator: Optional[Pipeline] = None
         
         # Set number of threads for CPU operations
         if self.config.device == "cpu":
             torch.set_num_threads(self.config.num_threads)
     
-    def load(self):
+    def load(self) -> None:
         """
         Load the model and tokenizer using RAGSystem.
         
@@ -172,12 +176,18 @@ class MistralModel:
             logger.info(f"Getting retrieval context for: {prompt[:50]}...")
             
             # Use the centralized method from RAGSystem
+            if self.rag_system is None:
+                return "RAG system not initialized"
+                
             context, _ = self.rag_system.get_retrieval_context(
                 prompt, 
                 top_k=self.config.max_retrieved_chunks
             )
             
-            return context
+            if isinstance(context, str):
+                return context
+            else:
+                return f"Error: unexpected context type {type(context)}"
             
         except Exception as e:
             logger.error(f"Error retrieving context: {str(e)}")
@@ -185,7 +195,7 @@ class MistralModel:
             logger.error(traceback.format_exc())
             return f"Error retrieving context: {str(e)}"
     
-    def generate(self, prompt: str) -> tuple[str, str, str]:
+    def generate(self, prompt: str) -> Tuple[str, str, str]:
         """
         Generate text from prompt with high-performance settings.
         
@@ -203,7 +213,7 @@ class MistralModel:
         
         try:
             # Use the centralized method for complete RAG response
-            result = self.rag_system.generate_rag_response(
+            result: ModelOutput = self.rag_system.generate_rag_response(
                 query=prompt,
                 top_k=self.config.max_retrieved_chunks,
                 max_new_tokens=self.config.max_new_tokens,
@@ -212,7 +222,11 @@ class MistralModel:
                 max_context_chars=3000  # Hard limit for M4 optimization
             )
             
-            return result["context"], result["direct_response"], result["combined_response"]
+            context = result.get("context", "")
+            direct_response = result.get("direct_response", "")
+            combined_response = result.get("combined_response", "")
+            
+            return context, direct_response, combined_response
             
         except Exception as e:
             logger.error(f"Error in generate: {str(e)}")
@@ -220,20 +234,21 @@ class MistralModel:
             if self.config.device == "mps":
                 clear_mps_cache()
             
-            # Let the exception propagate
-            raise
+            # Return error messages instead of raising
+            error_msg = f"Error generating response: {str(e)}"
+            return error_msg, error_msg, error_msg
 
 class AIScientistInterface:
     """Interface for the AI Scientist component."""
     
     def __init__(self):
-        self.ai_scientist_path = os.path.join(PROJECT_ROOT, "src/veritas/ai_scientist")
+        self.ai_scientist_path: str = os.path.join(PROJECT_ROOT, "src/veritas/ai_scientist")
         self.setup_paths()
     
-    def setup_paths(self):
+    def setup_paths(self) -> None:
         """Set up Python paths for AI Scientist."""
-        veritas_path = PROJECT_ROOT
-        templates_path = os.path.join(PROJECT_ROOT, "models", "Cognition")
+        veritas_path: str = PROJECT_ROOT
+        templates_path: str = os.path.join(PROJECT_ROOT, "models", "Cognition")
         
         # Add to Python path if not already there
         if veritas_path not in sys.path:
@@ -241,10 +256,15 @@ class AIScientistInterface:
         if templates_path not in sys.path:
             sys.path.insert(0, templates_path)
     
-    def list_available_templates(self):
-        """List available research templates."""
-        templates_dir = os.path.join(PROJECT_ROOT, "models", "Cognition", "templates")
-        templates = []
+    def list_available_templates(self) -> List[str]:
+        """
+        List available research templates.
+        
+        Returns:
+            List of template names
+        """
+        templates_dir: str = os.path.join(PROJECT_ROOT, "models", "Cognition", "templates")
+        templates: List[str] = []
         
         try:
             templates = [d for d in os.listdir(templates_dir) 
@@ -255,25 +275,45 @@ class AIScientistInterface:
         
         return templates
     
-    def run_interactive(self):
-        """Run the AI Scientist in interactive mode."""
-        script_path = os.path.join(self.ai_scientist_path, "run_interface.py")
-        result = subprocess.run([sys.executable, script_path], check=False)
-        return result.returncode == 0
-    
-    def run_simple_test(self):
-        """Run the simple test script."""
-        print("Running simple test mode...")
-        script_path = os.path.join(self.ai_scientist_path, "test_simple.py")
-        result = subprocess.run([sys.executable, script_path], check=False)
-        return result.returncode == 0
-    
-    def run_with_params(self, mode, experiment, num_ideas):
-        """Run the AI Scientist with specific parameters."""
-        print(f"Running {mode} mode for {experiment}, generating {num_ideas} idea(s)...")
-        script_path = os.path.join(self.ai_scientist_path, "run_scientist.py")
+    def run_interactive(self) -> bool:
+        """
+        Run the AI Scientist in interactive mode.
         
-        cmd = [
+        Returns:
+            True if successful, False otherwise
+        """
+        script_path: str = os.path.join(self.ai_scientist_path, "run_interface.py")
+        result = subprocess.run([sys.executable, script_path], check=False)
+        return result.returncode == 0
+    
+    def run_simple_test(self) -> bool:
+        """
+        Run the simple test script.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        print("Running simple test mode...")
+        script_path: str = os.path.join(self.ai_scientist_path, "test_simple.py")
+        result = subprocess.run([sys.executable, script_path], check=False)
+        return result.returncode == 0
+    
+    def run_with_params(self, mode: str, experiment: str, num_ideas: int) -> bool:
+        """
+        Run the AI Scientist with specific parameters.
+        
+        Args:
+            mode: Mode to run in ("direct" or "full")
+            experiment: Name of the experiment template
+            num_ideas: Number of ideas to generate
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        print(f"Running {mode} mode for {experiment}, generating {num_ideas} idea(s)...")
+        script_path: str = os.path.join(self.ai_scientist_path, "run_scientist.py")
+        
+        cmd: List[str] = [
             sys.executable, 
             script_path, 
             "--phase", "idea", 
@@ -291,19 +331,28 @@ class TerminalUI:
     """High-performance terminal-based user interface."""
     
     def __init__(self, model: MistralModel):
-        self.model = model
-        self.ai_scientist = AIScientistInterface()
+        self.model: MistralModel = model
+        self.ai_scientist: AIScientistInterface = AIScientistInterface()
     
-    def run(self, mode: SystemMode = SystemMode.RAG, host: str = "0.0.0.0", port: int = None):
-        """Run the terminal interface."""
+    def run(self, mode: SystemMode = SystemMode.RAG, host: str = "0.0.0.0", port: Optional[int] = None) -> None:
+        """
+        Run the terminal interface.
+        
+        Args:
+            mode: System mode to run in (RAG or AI Scientist)
+            host: Host to bind to (for API mode)
+            port: Port to bind to (for API mode)
+        """
         if mode == SystemMode.RAG:
             self.run_rag_interface()
         elif mode == SystemMode.AI_SCIENTIST:
             self.run_ai_scientist_interface()
         else:
             print(f"Unknown mode: {mode}")
+            # Handle unknown mode gracefully
+            self.run_rag_interface()  # Default to RAG interface
     
-    def run_rag_interface(self):
+    def run_rag_interface(self) -> None:
         """Run the RAG terminal interface."""
         print("\n" + "="*70)
         print("  MISTRAL RAG SYSTEM - OPTIMIZED FOR M4 MAX (128GB RAM)")
@@ -315,7 +364,7 @@ class TerminalUI:
         
         while True:
             try:
-                prompt = input("\n📝 Enter your prompt: ").strip()
+                prompt: str = input("\n📝 Enter your prompt: ").strip()
                 
                 if prompt.lower() in ['exit', 'quit']:
                     break
@@ -344,15 +393,15 @@ class TerminalUI:
                     continue
                 
                 print("\nGenerating response...")
-                start_time = time.time()
+                start_time: float = time.time()
                 
                 # Get the context from the RAG system
-                context = self.model.get_retrieval_context(prompt)
+                context: str = self.model.get_retrieval_context(prompt)
                 
                 # Generate the direct and combined responses
                 context, direct_response, combined_response = self.model.generate(prompt)
                 
-                elapsed_time = time.time() - start_time
+                elapsed_time: float = time.time() - start_time
                 
                 # Display responses in a formatted way
                 print("\n" + "="*70)
@@ -390,7 +439,7 @@ class TerminalUI:
                 if self.model.config.device == "mps":
                     clear_mps_cache()
     
-    def run_ai_scientist_interface(self):
+    def run_ai_scientist_interface(self) -> None:
         """Run the AI Scientist interface."""
         print("\n" + "="*70)
         print("  VERITAS AI SCIENTIST - RESEARCH ASSISTANT")
@@ -404,7 +453,7 @@ class TerminalUI:
         
         while True:
             try:
-                choice = input("\nSelect mode (1-4): ").strip()
+                choice: str = input("\nSelect mode (1-4): ").strip()
                 
                 if choice == '1':
                     print("\nLaunching interactive mode...")
@@ -418,7 +467,7 @@ class TerminalUI:
                 
                 elif choice == '3':
                     # List available templates
-                    templates = self.ai_scientist.list_available_templates()
+                    templates: List[str] = self.ai_scientist.list_available_templates()
                     print("\nAvailable research templates:")
                     for i, template in enumerate(templates, 1):
                         print(f"  {i}. {template}")
@@ -439,7 +488,7 @@ class TerminalUI:
                         except ValueError:
                             print("Please enter a valid number.")
                     
-                    experiment = templates[template_idx]
+                    experiment: str = templates[template_idx]
                     
                     # Select number of ideas
                     while True:
@@ -462,8 +511,8 @@ class TerminalUI:
                     print("  1. Optimized (recommended)")
                     print("  2. Comprehensive (in-depth)")
                     
-                    impl_choice = input("\nSelect implementation (1-2) [default: 1]: ")
-                    mode = "direct" if not impl_choice or impl_choice == "1" else "full"
+                    impl_choice: str = input("\nSelect implementation (1-2) [default: 1]: ")
+                    mode: str = "direct" if not impl_choice or impl_choice == "1" else "full"
                     
                     self.ai_scientist.run_with_params(mode, experiment, num_ideas)
                     break
@@ -513,24 +562,23 @@ def run_model(
         if ui_framework == UIFramework.TERMINAL:
             # Create a temporary UI with a placeholder model
             # This is a bit of a hack, but it allows us to reuse the existing UI code
-            ui = TerminalUI(MistralModel(model_config))
-            ui.run_ai_scientist_interface()
+            terminal_ui = TerminalUI(MistralModel(model_config))
+            terminal_ui.run_ai_scientist_interface()
+            return
         else:
             raise ValueError(f"Unsupported UI framework for AI Scientist: {ui_framework}")
-        return
     
-    # Only load the model for RAG mode
-    model = MistralModel(model_config)
-    
+    # We only reach here for RAG mode
     try:
-        # Load the model
+        # Create and load the model
+        model: MistralModel = MistralModel(model_config)
         logger.info("Loading model...")
         model.load()
         logger.info("Model loaded successfully.")
         
         # Run with the specified UI framework and deployment mode
         if ui_framework == UIFramework.TERMINAL:
-            ui = TerminalUI(model)
+            ui: TerminalUI = TerminalUI(model)
             ui.run(system_mode, host, port)
         else:
             raise ValueError(f"Unsupported UI framework: {ui_framework}")
@@ -583,9 +631,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Convert string arguments to enum values
-    ui_framework = UIFramework(args.ui)
-    deployment_mode = DeploymentMode(args.mode)
-    system_mode = SystemMode(args.system)
+    ui_framework: UIFramework = UIFramework(args.ui)
+    deployment_mode: DeploymentMode = DeploymentMode(args.mode)
+    system_mode: SystemMode = SystemMode(args.system)
     
     try:
         # Run the model

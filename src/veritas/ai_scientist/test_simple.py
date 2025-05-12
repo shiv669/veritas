@@ -11,6 +11,7 @@ import sys
 import logging
 import json
 from pathlib import Path
+from typing import Tuple, Dict, Any, List, Optional, Union, cast
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
@@ -29,15 +30,15 @@ logger = logging.getLogger(__name__)
 # Get the project root directory
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
-def setup_paths():
+def setup_paths() -> Tuple[str, str]:
     """
     Set up Python paths to include required modules.
     
     Returns:
         Tuple of paths (veritas_path, templates_path)
     """
-    veritas_path = PROJECT_ROOT
-    templates_path = os.path.join(PROJECT_ROOT, "models", "Cognition")
+    veritas_path: str = PROJECT_ROOT
+    templates_path: str = os.path.join(PROJECT_ROOT, "models", "Cognition")
     
     # Add to Python path if not already there
     if veritas_path not in sys.path:
@@ -48,25 +49,34 @@ def setup_paths():
     logger.info(f"Added to Python path: {veritas_path}, {templates_path}")
     return veritas_path, templates_path
 
-def test_simple_idea_generation():
-    """Test simple idea generation with Mistral model"""
-    # Create our adapter
-    from src.veritas.ai_scientist.adapter import MistralAdapter
+def test_simple_idea_generation() -> bool:
+    """
+    Test simple idea generation with Mistral model
+    
+    Returns:
+        bool: True if idea generation was successful, False otherwise
+    """
+    # Create our adapter - use relative import for better type checking
+    from veritas.ai_scientist.adapter import MistralAdapter
     
     # Create a client
     client = MistralAdapter()
     
     # Load seed ideas from template
-    template_name = "nanoGPT_lite"
-    template_path = os.path.join(PROJECT_ROOT, "models", "Cognition", "templates", template_name)
-    seed_ideas_path = os.path.join(template_path, "seed_ideas.json")
+    template_name: str = "nanoGPT_lite"
+    template_path: str = os.path.join(PROJECT_ROOT, "models", "Cognition", "templates", template_name)
+    seed_ideas_path: str = os.path.join(template_path, "seed_ideas.json")
     
     logger.info(f"Loading seed ideas from {seed_ideas_path}")
-    with open(seed_ideas_path, "r") as f:
-        seed_ideas = json.load(f)
+    try:
+        with open(seed_ideas_path, "r") as f:
+            seed_ideas: List[Dict[str, Any]] = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to load seed ideas: {e}")
+        return False
     
     # System message
-    system_message = f"""You are a creative AI scientist helping to generate novel research ideas for {template_name}.
+    system_message: str = f"""You are a creative AI scientist helping to generate novel research ideas for {template_name}.
     Your task is to generate unique research ideas that are:
     1. Novel and interesting
     2. Feasible to implement
@@ -76,8 +86,8 @@ def test_simple_idea_generation():
     Format the idea as a JSON object with Name, Title, and Experiment fields."""
     
     # Create a prompt from seed ideas
-    seed_examples = json.dumps(seed_ideas[:2], indent=2)
-    prompt = f"""Here are some example research ideas:
+    seed_examples: str = json.dumps(seed_ideas[:2], indent=2)
+    prompt: str = f"""Here are some example research ideas:
     
     {seed_examples}
     
@@ -87,7 +97,7 @@ def test_simple_idea_generation():
     """
     
     # Send to model
-    messages = [
+    messages: List[Dict[str, str]] = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": prompt}
     ]
@@ -103,7 +113,7 @@ def test_simple_idea_generation():
         )
         
         # Extract content
-        idea_text = response.choices[0].message.content
+        idea_text: str = response.choices[0].message.content
         logger.info(f"Response received: {idea_text}")
         
         # Try to parse JSON
@@ -115,10 +125,10 @@ def test_simple_idea_generation():
                 idea_text = idea_text.split("```")[1].split("```")[0].strip()
             
             # Parse the idea
-            idea = json.loads(idea_text)
+            idea: Dict[str, Any] = json.loads(idea_text)
             
             # Save the idea to file
-            output_file = "results/simple_idea.json"
+            output_file: str = "results/simple_idea.json"
             os.makedirs("results", exist_ok=True)
             with open(output_file, "w") as f:
                 json.dump(idea, f, indent=2)
@@ -138,7 +148,7 @@ if __name__ == "__main__":
     logger.info(f"Templates path: {templates_path}")
     
     # Run the test
-    success = test_simple_idea_generation()
+    success: bool = test_simple_idea_generation()
     
     # Print result
     if success:
