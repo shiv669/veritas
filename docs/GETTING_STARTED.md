@@ -14,9 +14,45 @@ It's like having a research assistant who has read all your documents and can an
 
 ## Quick Installation
 
-### Step 1: Set up your environment
+### Unified Installation (Recommended)
 
-Make sure you have Python 3.8 or higher installed. Then run:
+The fastest way to get started with Veritas is to use our unified installation script:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/veritas.git
+cd veritas
+
+# Run the unified installation script
+python install.py
+
+# To also download the Mistral model (optional, 13GB+)
+python install.py --download-model
+```
+
+The installation script will:
+1. Create all necessary directories
+2. Install all dependencies for both the RAG system and AI Scientist
+3. Set up the Veritas package
+4. Create basic research templates
+5. Optionally download the Mistral model
+
+After installation, you can use the command-line tools:
+```bash
+# Launch the RAG system (default)
+veritas
+
+# Launch the AI Scientist directly
+veritas-ai-scientist
+```
+
+### Manual Installation
+
+If you prefer to install manually:
+
+#### Step 1: Set up your environment
+
+Make sure you have Python 3.9 or higher installed. Then run:
 
 ```bash
 # Clone the repository
@@ -30,7 +66,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### Step 2: Download the Mistral 2 7B model
+#### Step 2: Download the Mistral 2 7B model
 
 ```bash
 # Create model directory
@@ -148,5 +184,6 @@ For more advanced usage, see the [AI Scientist documentation](AI_SCIENTIST.md).
 - **Model loading errors**: Make sure you downloaded the correct model
 - **Empty responses**: Check that your documents were properly processed
 - **Template errors**: Verify that the template path is correct in your configuration
+- **Installation errors**: Make sure you're using Python 3.9 or higher and have sufficient permissions
 
 Need more help? Check the [README.md](../README.md) or open an issue on GitHub! 

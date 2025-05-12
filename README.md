@@ -22,6 +22,40 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
 
 ## 📦 Installation
 
+We provide a unified installation script that handles everything for you:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/veritas.git
+cd veritas
+
+# Run the unified installation script
+python install.py
+
+# To also download the Mistral model (optional, 13GB+)
+python install.py --download-model
+```
+
+The installation script:
+1. Creates necessary directories
+2. Installs all dependencies for both RAG and AI Scientist
+3. Sets up the package for development
+4. Creates basic research templates for AI Scientist
+5. Optionally downloads the Mistral model
+
+After installation, you can use the command-line tools:
+```bash
+# Use main interface
+veritas
+
+# Use AI Scientist directly
+veritas-ai-scientist
+```
+
+### Manual Installation
+
+If you prefer manual installation:
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/yourusername/veritas.git
@@ -33,9 +67,15 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
    pip install -r requirements.txt
    ```
 
-3. Download and prepare the Mistral model (if needed):
+3. Install the package:
    ```bash
-   python scripts/download_model.py
+   pip install -e .
+   ```
+
+4. Download and prepare the Mistral model (if needed):
+   ```bash
+   mkdir -p models/mistral
+   python -c "from huggingface_hub import snapshot_download; snapshot_download('mistralai/Mistral-7B-v0.2', local_dir='models/mistral')"
    ```
 
 ## 🔍 Quick Start
