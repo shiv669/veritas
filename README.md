@@ -10,6 +10,7 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
 - **Terminal Interface**: Clean, simple interface for direct interaction without web frameworks
 - **Modular Architecture**: Clear separation between core RAG implementation and application layer
 - **AI Scientist**: Advanced research assistant built on top of our Mistral model with RAG capabilities
+- **Unified Interface**: Access both RAG and AI Scientist from a single entry point
 
 ## 🔧 System Requirements
 
@@ -39,7 +40,22 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
 
 ## 🔍 Quick Start
 
-Run the terminal-based interface:
+Run the unified terminal interface:
+
+```bash
+# Start with RAG system (default)
+python scripts/run.py
+
+# Start with AI Scientist
+python scripts/run.py --system ai_scientist
+
+# Show all options
+python scripts/run.py --help
+```
+
+### Using the RAG System
+
+The RAG system allows you to ask questions about your documents:
 
 ```bash
 python scripts/run.py
@@ -52,16 +68,20 @@ This will start the RAG system with the terminal UI, where you can directly ask 
 To use the AI Scientist component:
 
 ```bash
-# Navigate to the AI Scientist directory
-cd src/veritas/ai_scientist
+# Direct launch
+python scripts/run.py --system ai_scientist
 
-# Run the interactive interface
-python run_interface.py
+# Or start with RAG and switch
+python scripts/run.py
+# Then type 'scientist' at the prompt
 ```
 
 Or run a simple test:
 
 ```bash
+# Navigate to the AI Scientist directory
+cd src/veritas/ai_scientist
+
 # Simple test that generates one idea
 python test_simple.py
 ```
@@ -209,6 +229,18 @@ optimize_memory_for_m4()
 # Clear cache after heavy operations
 result = model.generate(complex_query)
 clear_mps_cache()  # Free up GPU memory
+```
+
+### Switching Between RAG and AI Scientist
+
+The unified interface allows you to switch between modes during a session:
+
+```bash
+# Start with RAG
+python scripts/run.py
+
+# Type 'scientist' at the prompt to switch to AI Scientist mode
+# Select option 4 to return to RAG mode
 ```
 
 ## 📊 Performance Optimization

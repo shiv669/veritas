@@ -9,17 +9,21 @@ All notable changes to the Veritas project will be documented in this file.
 - Comprehensive testing suite for the AI Scientist
 - Memory optimization for AI Scientist on M4 Mac
 - Test runner script (test_all.sh) for systematic testing
+- Unified interface in run.py for both RAG and AI Scientist functionality
+- Command-line option to directly launch AI Scientist mode
 
 ### Changed
 - Reorganized directory structure: moved from ai_scientist_integration to ai_scientist
 - Enhanced documentation with detailed usage examples
 - Improved error handling in the research generation pipeline
 - Updated class and method names for consistency
+- Refactored run.py to support multiple system modes
 
 ### Fixed
 - Memory leaks during research idea generation
 - Inconsistent output formatting in JSON responses
 - Path resolution issues in the template loading
+- Improved error handling and recovery in main interface
 
 ## [1.1.0] - 2025-05-11
 

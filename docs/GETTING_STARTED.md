@@ -42,11 +42,28 @@ python -c "from huggingface_hub import snapshot_download; snapshot_download('mis
 
 ## Using Veritas
 
-### Step 1: Add your documents
+### Unified Interface
+
+Veritas now provides a unified interface to access both its RAG system and AI Scientist:
+
+```bash
+# Start the RAG system (default)
+python scripts/run.py
+
+# Start the AI Scientist directly
+python scripts/run.py --system ai_scientist
+
+# For help and more options
+python scripts/run.py --help
+```
+
+### RAG System: Document Question Answering
+
+#### Step 1: Add your documents
 
 Place your research PDFs, text files, or other documents in the `data/input` directory.
 
-### Step 2: Process your documents
+#### Step 2: Process your documents
 
 ```bash
 # Create the directories if they don't exist
@@ -59,7 +76,15 @@ python scripts/indexing/format_rag.py --input-dir data/input --output-file data/
 python scripts/indexing/build_faiss_index.py --input-file data/processed.json --output-dir data/indices/latest
 ```
 
-### Step 3: Ask questions about your documents
+#### Step 3: Ask questions about your documents
+
+Start the RAG system and ask questions through the terminal interface:
+
+```bash
+python scripts/run.py
+```
+
+Or programmatically:
 
 ```python
 from veritas.rag import query_rag
@@ -73,32 +98,27 @@ for chunk in result["retrieved_chunks"]:
     print(f"Source: {chunk['chunk'].get('source', 'unknown')}")
 ```
 
-## Using the AI Scientist
+### AI Scientist: Research Assistant
 
 The AI Scientist component helps you generate research ideas, design experiments, and produce scientific content.
 
-### Step 1: Navigate to the AI Scientist directory
+#### Method 1: Using the unified interface (recommended)
 
 ```bash
+# Start the AI Scientist directly
+python scripts/run.py --system ai_scientist
+```
+
+This will provide a menu-driven interface for accessing all AI Scientist features.
+
+#### Method 2: Direct access to AI Scientist scripts
+
+```bash
+# Navigate to the AI Scientist directory
 cd src/veritas/ai_scientist
-```
 
-### Step 2: Run the interactive interface
-
-```bash
+# Run the interactive interface
 python run_interface.py
-```
-
-This will guide you through:
-- Selecting a research template
-- Choosing the number of ideas to generate
-- Setting the execution mode
-
-### Step 3: Try different options
-
-```bash
-# Run with specific parameters
-python run_interface.py --mode direct --experiment nanoGPT_lite --num-ideas 1
 
 # Run a simple test
 python test_simple.py
@@ -106,6 +126,12 @@ python test_simple.py
 # Run all available tests
 ./test_all.sh
 ```
+
+#### Method 3: Switch between modes during a session
+
+1. Start the RAG system: `python scripts/run.py`
+2. Type `scientist` at the prompt to switch to AI Scientist mode
+3. When finished with AI Scientist, select option 4 to return to RAG mode
 
 For more advanced usage, see the [AI Scientist documentation](AI_SCIENTIST.md).
 
