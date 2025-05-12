@@ -81,3 +81,4 @@ coverage.xml
 # Temporary directories
 tmp/
 /tmp/
+models/faiss/index.faiss
