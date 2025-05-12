@@ -2,6 +2,25 @@
 
 All notable changes to the Veritas project will be documented in this file.
 
+## [1.2.0] - 2025-05-20
+
+### Added
+- AI Scientist: A new core component for research assistance
+- Comprehensive testing suite for the AI Scientist
+- Memory optimization for AI Scientist on M4 Mac
+- Test runner script (test_all.sh) for systematic testing
+
+### Changed
+- Reorganized directory structure: moved from ai_scientist_integration to ai_scientist
+- Enhanced documentation with detailed usage examples
+- Improved error handling in the research generation pipeline
+- Updated class and method names for consistency
+
+### Fixed
+- Memory leaks during research idea generation
+- Inconsistent output formatting in JSON responses
+- Path resolution issues in the template loading
+
 ## [1.1.0] - 2025-05-11
 
 ### Added

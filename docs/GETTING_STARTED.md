@@ -1,4 +1,4 @@
-# Getting Started with Veritas v1.0
+# Getting Started with Veritas v1.2
 
 Welcome to Veritas! This guide will help you get up and running with minimal technical knowledge.
 
@@ -8,6 +8,7 @@ Veritas is an AI assistant for research that can:
 - Answer questions based on your documents
 - Provide citations to where it found information
 - Process large collections of research papers, books, or technical documents
+- Generate novel research ideas and scientific content
 
 It's like having a research assistant who has read all your documents and can answer questions about them!
 
@@ -72,16 +73,54 @@ for chunk in result["retrieved_chunks"]:
     print(f"Source: {chunk['chunk'].get('source', 'unknown')}")
 ```
 
+## Using the AI Scientist
+
+The AI Scientist component helps you generate research ideas, design experiments, and produce scientific content.
+
+### Step 1: Navigate to the AI Scientist directory
+
+```bash
+cd src/veritas/ai_scientist
+```
+
+### Step 2: Run the interactive interface
+
+```bash
+python run_interface.py
+```
+
+This will guide you through:
+- Selecting a research template
+- Choosing the number of ideas to generate
+- Setting the execution mode
+
+### Step 3: Try different options
+
+```bash
+# Run with specific parameters
+python run_interface.py --mode direct --experiment nanoGPT_lite --num-ideas 1
+
+# Run a simple test
+python test_simple.py
+
+# Run all available tests
+./test_all.sh
+```
+
+For more advanced usage, see the [AI Scientist documentation](AI_SCIENTIST.md).
+
 ## Next Steps
 
 - Try different question formats to get the best responses
 - Add more documents to expand your knowledge base
+- Experiment with different research templates
 - Check out the more advanced features in the full documentation
 
 ## Troubleshooting
 
-- **Out of memory errors**: Reduce batch size in the indexing script
+- **Out of memory errors**: Reduce batch size in the indexing script or use `--use-direct-implementation` flag
 - **Model loading errors**: Make sure you downloaded the correct model
 - **Empty responses**: Check that your documents were properly processed
+- **Template errors**: Verify that the template path is correct in your configuration
 
 Need more help? Check the [README.md](../README.md) or open an issue on GitHub! 

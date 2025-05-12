@@ -9,6 +9,7 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
 - **High-Quality RAG**: Accurate document retrieval and context-aware answer generation
 - **Terminal Interface**: Clean, simple interface for direct interaction without web frameworks
 - **Modular Architecture**: Clear separation between core RAG implementation and application layer
+- **AI Scientist**: Advanced research assistant built on top of our Mistral model with RAG capabilities
 
 ## 🔧 System Requirements
 
@@ -46,6 +47,27 @@ python scripts/run.py
 
 This will start the RAG system with the terminal UI, where you can directly ask questions.
 
+### Using AI Scientist
+
+To use the AI Scientist component:
+
+```bash
+# Navigate to the AI Scientist directory
+cd src/veritas/ai_scientist
+
+# Run the interactive interface
+python run_interface.py
+```
+
+Or run a simple test:
+
+```bash
+# Simple test that generates one idea
+python test_simple.py
+```
+
+For more information, see the [AI Scientist README](src/veritas/ai_scientist/README.md).
+
 ## 🏗️ Architecture
 
 Veritas is designed with a clear separation of concerns:
@@ -55,6 +77,7 @@ Veritas is designed with a clear separation of concerns:
 - **Configuration** (`src/veritas/config.py`): Centralized settings for the entire system
 - **Apple Silicon Optimizations** (`src/veritas/mps_utils.py`): Specialized utilities for Apple's Metal framework
 - **Text Processing** (`src/veritas/chunking.py`): Document segmentation for efficient indexing and retrieval
+- **AI Scientist** (`src/veritas/ai_scientist`): Research assistant built on top of our RAG system
 
 ### UML Class Diagram
 
@@ -127,6 +150,29 @@ model.load()
 context, direct_response, combined_response = model.generate(
     "What are the advantages of RAG systems over pure LLMs?"
 )
+```
+
+### AI Scientist (src/veritas/ai_scientist)
+
+A research assistant built on top of our Mistral model with RAG capabilities:
+
+```python
+from src.veritas.ai_scientist.run_scientist import AIScientist
+
+# Create an AI Scientist instance
+scientist = AIScientist(
+    experiment="nanoGPT_lite", 
+    num_ideas=1
+)
+
+# Generate research ideas
+ideas = scientist.generate_ideas()
+
+# Print the generated ideas
+for idea in ideas:
+    print(f"Idea: {idea['title']}")
+    print(f"Description: {idea['description']}")
+    print(f"Novelty: {idea['novelty_score']}")
 ```
 
 ## 🚴‍♀️ Advanced Usage
