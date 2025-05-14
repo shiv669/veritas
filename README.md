@@ -1,8 +1,8 @@
 # Veritas: High-Performance RAG for Apple Silicon
 
-Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips, with particular focus on the M4 Mac with 128GB RAM. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B.
+Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips, with particular focus on the M4 Mac with 128GB RAM. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B. This project was developed during MLH Global Hack Week: Open Source Week.
 
-## 🚀 Key Features
+## Key Features
 
 - **Apple Silicon Optimized**: Specially tuned for M1, M2, M3, and M4 Macs with MPS (Metal Performance Shaders) acceleration
 - **Memory-Efficient Design**: Carefully manages memory to prevent OOM errors even with large models
@@ -11,6 +11,18 @@ Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically 
 - **Modular Architecture**: Clear separation between core RAG implementation and application layer
 - **AI Scientist**: Advanced research assistant built on top of our Mistral model with RAG capabilities
 - **Unified Interface**: Access both RAG and AI Scientist from a single entry point
+
+## AI Scientist Vision
+
+The AI Scientist component represents our vision for autonomous research assistance. It combines advanced language models with RAG capabilities to:
+
+1. **Autonomous Research**: Generate novel research ideas and hypotheses based on existing literature
+2. **Contextual Understanding**: Maintain awareness of research context and domain-specific knowledge
+3. **Idea Generation**: Create structured research proposals with novelty scoring
+4. **Literature Synthesis**: Automatically analyze and synthesize research papers
+5. **Experimental Design**: Assist in designing research methodologies and experiments
+
+The system is designed to augment human researchers by providing intelligent assistance while maintaining scientific rigor and accuracy.
 
 ## 🔧 System Requirements
 
@@ -312,3 +324,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Hugging Face for Transformers and SentenceTransformers
 - Facebook Research for FAISS
 - The PyTorch team for MPS support
+- MLH Global Hack Week for the opportunity to develop this project
