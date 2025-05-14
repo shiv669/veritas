@@ -1,6 +1,6 @@
-# Veritas: High-Performance RAG for Apple Silicon
+# Veritas: A Scientist for Autonomous Research
 
-Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips, with particular focus on the M4 Mac with 128GB RAM. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B. This project was developed during MLH Global Hack Week: Open Source Week.
+Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B. This project was developed during MLH Global Hack Week: Open Source Week.
 
 ## Key Features
 
