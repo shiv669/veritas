@@ -2,16 +2,6 @@
 
 Veritas is a Retrieval-Augmented Generation (RAG) system optimized specifically for Apple Silicon M-series chips. It provides efficient document retrieval and context-aware answer generation using Mistral 2 7B. This project was developed during MLH Global Hack Week: Open Source Week.
 
-## Key Features
-
-- **Apple Silicon Optimized**: Specially tuned for M1, M2, M3, and M4 Macs with MPS (Metal Performance Shaders) acceleration
-- **Memory-Efficient Design**: Carefully manages memory to prevent OOM errors even with large models
-- **High-Quality RAG**: Accurate document retrieval and context-aware answer generation
-- **Terminal Interface**: Clean, simple interface for direct interaction without web frameworks
-- **Modular Architecture**: Clear separation between core RAG implementation and application layer
-- **AI Scientist**: Advanced research assistant built on top of our Mistral model with RAG capabilities
-- **Unified Interface**: Access both RAG and AI Scientist from a single entry point
-
 ## AI Scientist Vision
 
 The AI Scientist component represents our vision for autonomous research assistance. It combines advanced language models with RAG capabilities to:
@@ -21,6 +11,16 @@ The AI Scientist component represents our vision for autonomous research assista
 3. **Idea Generation**: Create structured research proposals with novelty scoring
 4. **Literature Synthesis**: Automatically analyze and synthesize research papers
 5. **Experimental Design**: Assist in designing research methodologies and experiments
+
+## Key Features
+
+- **Apple Silicon Optimized**: Specially tuned for M1, M2, M3, and M4 Macs with MPS (Metal Performance Shaders) acceleration
+- **Memory-Efficient Design**: Carefully manages memory to prevent OOM errors even with large models
+- **High-Quality RAG**: Accurate document retrieval and context-aware answer generation
+- **Terminal Interface**: Clean, simple interface for direct interaction without web frameworks
+- **Modular Architecture**: Clear separation between core RAG implementation and application layer
+- **AI Scientist**: Advanced research assistant built on top of our Mistral model with RAG capabilities
+- **Unified Interface**: Access both RAG and AI Scientist from a single entry point
 
 The system is designed to augment human researchers by providing intelligent assistance while maintaining scientific rigor and accuracy.
 
