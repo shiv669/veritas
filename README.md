@@ -6,7 +6,7 @@ One of the grand challenges of artificial intelligence is developing agents capa
 
 Veritas was developed during the Major League Hacking Open Source Hackathon (May 9–15, 2025). At the end of the week, MLH ranked me among the top 1% of participating hackers.
 
-## Example Research Outputs
+## Research Outputs
 
 Machine learning research papers across a range of emerging topics, including diffusion modeling, language generation, and grokking dynamics:
 
@@ -24,7 +24,7 @@ Machine learning research papers across a range of emerging topics, including di
 
 > Note: While all core modules of Veritas have been validated, a production-grade RAG pipeline is still under development. Future versions will support fully autonomous literature grounding and citation evaluation. The example papers currently showcased were generated using the AI Scientist framework, which serves as the core research engine powering Veritas.
 
-## Core Research Workflow
+## Research Workflow
 
 Veritas mirrors the architecture of [The AI Scientist](https://arxiv.org/pdf/2408.06292) and implements the full research pipeline:
 
