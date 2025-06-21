@@ -130,7 +130,7 @@ We use `mypy` for static type checking. Run the following command to check types
 mypy src/
 ```
 
-Configuration for mypy is in `.mypy.ini` at the project root.
+Configuration for mypy is in `config/.mypy.ini`.
 
 ## Common Type Definitions
 

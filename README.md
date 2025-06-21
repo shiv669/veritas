@@ -59,17 +59,20 @@ We provide a unified installation script that handles everything for you:
 git clone https://github.com/yourusername/veritas.git
 cd veritas
 
-# Basic installation
-python install.py
+# Basic installation (using convenience script)
+./install.sh
+
+# Or directly from tools directory
+python tools/install.py
 
 # To also download the Mistral model (optional, 13GB+)
-python install.py --download-model
+python tools/install.py --download-model
 
 # More installation options
-python install.py --upgrade                 # Upgrade existing dependencies
-python install.py --ignore-errors           # Continue even if some steps fail
-python install.py --skip-dependencies       # Skip installing dependencies
-python install.py --model "mistralai/Mistral-7B-v0.2"  # Specify model to download
+python tools/install.py --upgrade                 # Upgrade existing dependencies
+python tools/install.py --ignore-errors           # Continue even if some steps fail
+python tools/install.py --skip-dependencies       # Skip installing dependencies
+python tools/install.py --model "mistralai/Mistral-7B-v0.2"  # Specify model to download
 ```
 
 The installation script:
