@@ -6,16 +6,25 @@ One of the grand challenges of artificial intelligence is developing agents capa
 
 Built during Major League Hacking's Open Source Hack Week, Veritas was selected among the top 1% of projects submitted globally.
 
-## Example papers
+## Example Research Outputs
 
-Veritas has generated machine learning research papers in areas such as:
+Machine learning research papers across a range of emerging topics, including diffusion modeling, language generation, and grokking dynamics:
 
-- DualScale Diffusion: Adaptive Feature Balancing for Low-Dimensional Generative Models- Language model architecture
-- StyleFusion: Adaptive Multi-style Generation in Character-Level Language Models
-- Adaptive Learning Rates for Transformers via Q-Learning
-- Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models
+- **[DualScale Diffusion: Adaptive Feature Balancing for Low-Dimensional Generative Models](https://drive.google.com/file/d/1f4AhMX_iQBE0Ssif0AtirX9P6eIJuEk4/view?usp=sharing)**  
+  Proposes a dual-scale architecture to enhance generative quality in constrained latent spaces.
 
-These papers were rated "Weak Accept" or higher by the system's built-in reviewer, based on major ML conference criteria.
+- **[StyleFusion: Adaptive Multi-style Generation in Character-Level Language Models](https://drive.google.com/file/d/1qriR2UUccgu0qhOZLhpEJIJI9fsw8v3A/view?usp=sharing)**  
+  Introduces a style-conditioning mechanism to increase output diversity in character-level generation.
+
+- **[Adaptive Learning Rates for Transformers via Q-Learning](https://drive.google.com/file/d/1fcaZMzSLufjId03juZvbWUXcDtO58HSe/view?usp=sharing)**  
+  Applies reinforcement learning to optimize dynamic learning rates across training iterations.
+
+- **[Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models](https://drive.google.com/file/d/1qOXNIegQzxn4HfqNk398K97Hl3_WGdRB/view?usp=sharing)**  
+  Investigates how initialization techniques influence the emergence of grokking in transformers.
+
+These papers were rated "Weak Accept" or higher by Veritas' built-in reviewer, aligned with top-tier machine learning conference standards.
+
+> Note: While all core modules of Veritas have been validated, a production-grade RAG pipeline is still under development. Future versions will include fully autonomous literature grounding and citation evaluation.
 
 ## Core Research Workflow
 
