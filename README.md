@@ -4,7 +4,7 @@ One of the grand challenges in artificial intelligence is building agents capabl
 
 Veritas represents a step forward: a modular, locally deployable system built to function as an autonomous research assistant.
 
-## Veritas: Architecting Autonomous Research
+## Architecting Autonomous Research
 
 Veritas is a Retrieval-Augmented Generation (RAG) system optimized for Apple Silicon. It combines the power of Mistral 2 7B with a memory-efficient, high-throughput retrieval pipeline. Developed during MLH Global Hack Week: Open Source, Veritas was designed from the ground up to support scientific reasoning, literature comprehension, and hypothesis generation.
 
@@ -51,7 +51,7 @@ Veritas is not a black box. Every research output is traceable, every citation i
 - At least 8GB of free SSD storage
 - Python 3.9 or higher
 
-## 📦 Installation
+## Installation
 
 We provide a unified installation script that handles everything for you:
 
@@ -118,7 +118,7 @@ If you prefer manual installation:
    python -c "from huggingface_hub import snapshot_download; snapshot_download('mistralai/Mistral-7B-v0.2', local_dir='models/mistral')"
    ```
 
-## 🔍 Quick Start
+## Quick Start
 
 Run the unified terminal interface:
 
@@ -168,7 +168,7 @@ python test_simple.py
 
 For more information, see the [AI Scientist README](src/veritas/ai_scientist/README.md).
 
-## 🏗️ Architecture
+## Architecture
 
 Veritas is designed with a clear separation of concerns:
 
@@ -199,7 +199,7 @@ Veritas is designed with a clear separation of concerns:
                     └───────────────┘
 ```
 
-## 🧩 Core Components
+## Core Components
 
 ### RAGSystem (src/veritas/rag.py)
 
@@ -275,7 +275,7 @@ for idea in ideas:
     print(f"Novelty: {idea['novelty_score']}")
 ```
 
-## 🚴‍♀️ Advanced Usage
+## Advanced Usage
 
 ### Custom Document Chunking
 
@@ -323,7 +323,7 @@ python scripts/run.py
 # Select option 4 to return to RAG mode
 ```
 
-## 📊 Performance Optimization
+## Performance Optimization
 
 Veritas includes several optimizations for Apple Silicon:
 
@@ -333,14 +333,16 @@ Veritas includes several optimizations for Apple Silicon:
 4. **Caching Control**: Explicit cache clearing to prevent memory leaks
 5. **SSD Offloading**: Uses SSD for temporary files to reduce RAM pressure
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
-- Mistral AI for their excellent 7B model
-- Hugging Face for Transformers and SentenceTransformers
-- Facebook Research for FAISS
-- The PyTorch team for MPS support
-- MLH Global Hack Week for the opportunity to develop this project
+
+Mistral AI – for the Mistral 7B model, which powers the core reasoning capabilities of Veritas
+Hugging Face – for maintaining the Transformers and SentenceTransformers libraries, essential to our pipeline
+FAISS (Facebook Research) – for enabling efficient vector search and scalable retrieval
+PyTorch – for supporting MPS acceleration on Apple Silicon, making local deployment feasible
+Major League Hacking – for providing the space and community to initiate and develop this project
+Sakana AI – for introducing The AI Scientist, which inspired and informed key functionalities in Veritas
