@@ -21,6 +21,8 @@ These papers were rated "Weak Accept" or higher by the system's built-in reviewe
 
 Veritas mirrors the architecture of The AI Scientist and implements the full research pipeline:
 
+![AI Scientist Architecture](https://github.com/user-attachments/assets/e166c52d-ac74-44b3-9e5a-78c4a3309492)
+
 ### 1. Idea Generation
 - Receives a topic template
 - Brainstorms novel research directions
@@ -39,8 +41,6 @@ Veritas mirrors the architecture of The AI Scientist and implements the full res
 - Uses a custom LLM reviewer aligned with ML conference standards
 - Evaluates novelty, clarity, rigor
 - Feeds back into the system for future iterations
-
-![AI Scientist Architecture](https://drive.google.com/file/d/1ol5MVNJLhtAX_8ysFi5-r_VHT4NpkD1G/view?usp=sharing)
 
 ## Technical Stack
 
