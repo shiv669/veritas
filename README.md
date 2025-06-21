@@ -10,10 +10,10 @@ Veritas was developed during the Major League Hacking Open Source Hackathon (May
 
 Machine learning research papers across a range of emerging topics, including diffusion modeling, language generation, and grokking dynamics:
 
-- **[DualScale Diffusion: Adaptive Feature Balancing for Low-Dimensional Generative Models](https://github.com/matiasrodlo/veritas/blob/main/docs/research-output/adaptive_dual_scale_denoising.pdf)**  
-- **[StyleFusion: Adaptive Multi-style Generation in Character-Level Language Models](https://github.com/matiasrodlo/veritas/blob/main/docs/research-output/multi_style_adapter.pdf)**  
-- **[Adaptive Learning Rates for Transformers via Q-Learning](https://github.com/matiasrodlo/veritas/blob/main/docs/research-output/rl_lr_adaptation.pdf)**  
-- **[Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models](https://github.com/matiasrodlo/veritas/blob/main/docs/research-output/weight_initialization_grokking.pdf)**  
+- **[DualScale Diffusion: Adaptive Feature Balancing for Low-Dimensional Generative Models](https://drive.google.com/file/d/1f4AhMX_iQBE0Ssif0AtirX9P6eIJuEk4/view?usp=sharing)**  
+- **[StyleFusion: Adaptive Multi-style Generation in Character-Level Language Models](https://drive.google.com/file/d/1qriR2UUccgu0qhOZLhpEJIJI9fsw8v3A/view?usp=sharing)**  
+- **[Adaptive Learning Rates for Transformers via Q-Learning](https://drive.google.com/file/d/1fcaZMzSLufjId03juZvbWUXcDtO58HSe/view?usp=sharing)**  
+- **[Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models](https://drive.google.com/file/d/1qOXNIegQzxn4HfqNk398K97Hl3_WGdRB/view?usp=sharing)**  
 
 > Note: While all core modules of Veritas have been validated, a production-grade RAG pipeline is still under development. Future versions will support fully autonomous literature grounding and citation evaluation. The example papers currently showcased were generated using the AI Scientist framework, which serves as the core research engine powering Veritas.
 
