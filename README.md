@@ -26,7 +26,7 @@ Machine learning research papers across a range of emerging topics, including di
 
 ## Core Research Workflow
 
-Veritas mirrors the architecture of The AI Scientist and implements the full research pipeline:
+Veritas mirrors the architecture of [The AI Scientist](https://arxiv.org/pdf/2408.06292) and implements the full research pipeline:
 
 ![AI Scientist Architecture](https://github.com/matiasrodlo/veritas/blob/main/docs/veritas-ai-scientist.gif)
 
