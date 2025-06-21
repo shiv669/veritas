@@ -4,7 +4,7 @@ One of the grand challenges of artificial intelligence is developing agents capa
 
 **Veritas** is a comprehensive system for fully automatic scientific discovery, enabling Foundation Models such as Large Language Models (LLMs) to perform research independently. It runs locally on **Mistral 7B**, ensuring full data privacy, minimizing citation hallucinations through **Retrieval-Augmented Generation (RAG)**, and supporting customizable scientific writing styles via **QLoRA (Quantized Low-Rank Adaptation)**. Veritas also integrates **LongLoRA** for context extension, allowing input windows of over **100,000 tokens** to support long-form research workflows.
 
-Built during Major League Hacking's Open Source Hack Week, Veritas was selected among the top 1% of projects submitted globally.
+At the end of the week, Major League Hacking ranked me among the top 1% of hackers at the Open Source Hackathon (May 9–15, 2025).
 
 ## Example Research Outputs
 
