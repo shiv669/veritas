@@ -1,134 +1,62 @@
 # Veritas: A Scientist for Autonomous Research
 
-One of the grand challenges in artificial intelligence is building agents capable of conducting scientific research independently—generating new knowledge without constant human supervision. While frontier models like GPT or Claude have been used to assist researchers in tasks like brainstorming or code generation, they still rely heavily on manual prompting and domain-specific constraints.
+One of the grand challenges of artificial intelligence is developing agents capable of conducting scientific research and discovering new knowledge. While frontier models have been used to assist human scientists—for example, in brainstorming ideas or writing code—they still require extensive manual supervision or are constrained to narrow, task-specific use cases.
 
-Veritas represents a step forward: a modular, locally deployable system built to function as an autonomous research assistant.
+**Veritas** is a comprehensive system for fully automatic scientific discovery, enabling Foundation Models such as Large Language Models (LLMs) to perform research independently. It runs locally on **Mistral 7B**, ensuring full data privacy, minimizing citation hallucinations through **Retrieval-Augmented Generation (RAG)**, and supporting customizable scientific writing styles via **QLoRA (Quantized Low-Rank Adaptation)**. Veritas also integrates **LongLoRA** for context extension, allowing input windows of over **100,000 tokens** to support long-form research workflows.
 
-## Architecting Autonomous Research
+Built during Major League Hacking's Open Source Hack Week, Veritas was selected among the top 1% of projects submitted globally.
 
-Veritas is a Retrieval-Augmented Generation (RAG) system optimized for Apple Silicon. It combines the power of Mistral 2 7B with a memory-efficient, high-throughput retrieval pipeline. Developed during MLH Global Hack Week: Open Source, Veritas was designed from the ground up to support scientific reasoning, literature comprehension, and hypothesis generation.
+## Example papers
 
-![image](https://github.com/user-attachments/assets/3f42a833-0c0a-4c2c-9dee-244fcb4ca56f)
+Veritas has generated machine learning research papers in areas such as:
 
-At its core, Veritas includes:
+- DualScale Diffusion: Adaptive Feature Balancing for Low-Dimensional Generative Models- Language model architecture
+- StyleFusion: Adaptive Multi-style Generation in Character-Level Language Models
+- Adaptive Learning Rates for Transformers via Q-Learning
+- Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models
 
-### AI Scientist Mode
-A high-level orchestration module that enables Veritas to operate as a self-directed scientific agent:
+These papers were rated "Weak Accept" or higher by the system's built-in reviewer, based on major ML conference criteria.
 
-**Autonomous Ideation**: Generates novel research questions and hypotheses based on literature patterns
+## Core Research Workflow
 
-**Contextual Comprehension**: Maintains continuity across long academic texts using extended token context
+Veritas mirrors the architecture of The AI Scientist and implements the full research pipeline:
 
-**Literature Synthesis**: Summarizes, integrates, and cites key papers to support theoretical framing
+### 1. Idea Generation
+- Receives a topic template
+- Brainstorms novel research directions
+- Validates novelty using Semantic Scholar
 
-**Experimental Design**: Suggests research methodologies, metrics, and potential datasets
+### 2. Experimental Iteration
+- Executes code for proposed methods
+- Collects outputs and visualizations
+- Annotates each result for interpretation
 
-**Self-Evaluation**: Scores proposals on dimensions such as novelty, feasibility, and impact
+### 3. Paper Write-up
+- Generates a LaTeX-formatted scientific paper
+- Autonomously sources relevant citations
 
-## Key Features
+### 4. Automated Peer Review
+- Uses a custom LLM reviewer aligned with ML conference standards
+- Evaluates novelty, clarity, rigor
+- Feeds back into the system for future iterations
 
-**Optimized for Apple Silicon**: Tailored for M1, M2, M3, and M4 chips using Metal Performance Shaders (MPS)
+![AI Scientist Architecture](https://drive.google.com/file/d/1ol5MVNJLhtAX_8ysFi5-r_VHT4NpkD1G/view?usp=sharing)
 
-**Memory-Efficient Architecture**: Prevents out-of-memory errors while supporting long-context generation
+## Technical Stack
 
-**High-Quality RAG Implementation**: Precision-tuned document retrieval and context-aware reasoning
-
-**Terminal-Based Interface**: Lightweight, transparent interaction without reliance on web frameworks
-
-**Modular Architecture**: Separation between RAG engine, interface layer, and scientific reasoning core
-
-**Unified Entry Point**: Supports both standard RAG queries and AI Scientist workflows in one interface
-
-## Scientific Rigor and Transparency
-
-Veritas is not a black box. Every research output is traceable, every citation is sourced, and every step is auditable. The system is designed to augment—rather than replace—human researchers, by automating repetitive cognitive tasks while preserving scientific rigor and critical oversight.
-
-## System Requirements
-
-- Apple Silicon Mac (M1, M2, M3, or M4)
-- macOS Monterey or later
-- Minimum 16GB RAM (32GB+ recommended, 128GB optimal for M4)
-- At least 8GB of free SSD storage
-- Python 3.9 or higher
-
-## Installation
-
-```bash
-git clone https://github.com/yourusername/veritas.git
-cd veritas
-python install.py --download-model
-```
-
-The installation script handles dependencies, model setup, and package configuration automatically.
-
-
-
-## Quick Start
-
-```bash
-# Launch RAG system
-python scripts/run.py
-
-# Launch AI Scientist
-python scripts/run.py --system ai_scientist
-
-# Switch between modes by typing 'scientist' or 'rag' at the prompt
-```
-
-## Architecture
-
-**Core RAG Implementation** (`src/veritas/rag.py`) – Retrieval and generation engine
-
-**Application Layer** (`scripts/run.py`) – Interface and configuration
-
-**AI Scientist** (`src/veritas/ai_scientist`) – Autonomous research capabilities
-
-**Apple Silicon Optimizations** (`src/veritas/mps_utils.py`) – Metal framework utilities
-
-
-
-## Usage
-
-```python
-from veritas import RAGSystem
-
-# Initialize system
-rag = RAGSystem(
-    embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-    llm_model="models/mistral-7b",
-    device="mps"
-)
-
-# Generate response
-response = rag.generate_rag_response(
-    query="How does a RAG system work?",
-    top_k=5,
-    max_new_tokens=200
-)
-```
-
-
-
-## Optimizations
-
-**MPS Acceleration** – Metal Performance Shaders for faster computation
-
-**Memory Management** – Prevents out-of-memory errors on Apple Silicon
-
-**Half-Precision Computing** – FP16 optimization for better performance
-
-**SSD Offloading** – Reduces RAM pressure through intelligent caching
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+| Component           | Description                          |
+|---------------------|--------------------------------------|
+| Language Model      | Mistral 2 7B with QLoRA               |
+| Context Extension   | LongLoRA (supports 100K+ tokens)      |
+| Retrieval Engine    | FAISS + SentenceTransformers          |
+| RAG Pipeline        | Custom Python + Hugging Face stack    |
+| Hardware            | MacBook Pro M4 Max (local execution)  |
 
 ## Acknowledgements
 
-
-Mistral AI – for the Mistral 7B model, which powers the core reasoning capabilities of Veritas
-Hugging Face – for maintaining the Transformers and SentenceTransformers libraries, essential to our pipeline
-FAISS (Facebook Research) – for enabling efficient vector search and scalable retrieval
-PyTorch – for supporting MPS acceleration on Apple Silicon, making local deployment feasible
-Major League Hacking – for providing the space and community to initiate and develop this project
-Sakana AI – for introducing The AI Scientist, which inspired and informed key functionalities in Veritas
+- Mistral AI for the open-weight 7B model  
+- Hugging Face for Transformers and SentenceTransformers  
+- Facebook Research for FAISS  
+- PyTorch for MPS support on Apple Silicon  
+- Major League Hacking (MLH) for the hackathon platform  
+- Sakana AI for pioneering The AI Scientist concept  
