@@ -22,8 +22,6 @@ Machine learning research papers across a range of emerging topics, including di
 - **[Unlocking Grokking: A Comparative Study of Weight Initialization Strategies in Transformer Models](https://drive.google.com/file/d/1qOXNIegQzxn4HfqNk398K97Hl3_WGdRB/view?usp=sharing)**  
   Investigates how initialization techniques influence the emergence of grokking in transformers.
 
-These papers were rated "Weak Accept" or higher by Veritas' built-in reviewer, aligned with top-tier machine learning conference standards.
-
 > Note: While all core modules of Veritas have been validated, a production-grade RAG pipeline is still under development. Future versions will include fully autonomous literature grounding and citation evaluation.
 
 ## Core Research Workflow
